@@ -1,9 +1,14 @@
 import EdgeCase
 
 @EdgeCases
-struct Coordinate {
-    let x: Int
-    let y: Int
+struct User {
+    let id: Int
+    let name: String
+    var isActive: Bool
+    let karma: Double
 }
 
-print("Coordinate.edgeCases: \(Coordinate.edgeCases)")
+print("User.edgeCases generated \(User.edgeCases.count) instances:")
+for user in User.edgeCases {
+    print("  \(String(describing: user).prefix(96))")
+}
