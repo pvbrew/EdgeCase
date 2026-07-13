@@ -99,6 +99,10 @@ and add the product to your test target:
 
 Or in Xcode: **File ▸ Add Package Dependencies…** and paste the repo URL.
 
+## Example
+
+An example iOS app is available in [`Examples/EdgeCaseExample`](Examples/EdgeCaseExample). Its SwiftUI screen renders every generated `User` instance — including the 10,000-character username and `NaN` karma — and its unit test target shows the canonical workflow: iterate `User.edgeCases` through the code under test, plus an `@EdgeCases`-annotated fixture declared directly in the test bundle.
+
 ## Roadmap
 
 - **v0.2** — Optionals, collections (`Array`, `Dictionary`, `Set`), unicode string cases, nested types, enums
