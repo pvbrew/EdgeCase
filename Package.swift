@@ -40,6 +40,13 @@ let package = Package(
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
             ]
         ),
+
+        // A test target that compiles and runs the generated code, verifying
+        // the expansions type-check and produce the expected values.
+        .testTarget(
+            name: "EdgeCaseRuntimeTests",
+            dependencies: ["EdgeCase"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

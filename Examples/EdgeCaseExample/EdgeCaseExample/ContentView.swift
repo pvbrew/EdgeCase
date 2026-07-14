@@ -10,7 +10,7 @@ struct ContentView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(user.displayName)
                                     .font(.headline)
-                                Text("id \(user.id) · karma \(user.formattedKarma)")
+                                Text("id \(user.id) · karma \(user.formattedKarma) · \(user.membershipLabel) · \(user.tagSummary)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
