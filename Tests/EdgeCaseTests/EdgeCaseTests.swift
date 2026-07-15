@@ -11,9 +11,11 @@ import XCTest
 import EdgeCaseMacros
 
 /// Declaring the conformance in the spec lets the test harness exercise the
-/// extension role the way the compiler does.
+/// extension role the way the compiler does. The `@EdgeCase` marker is
+/// registered too, so it is consumed (and stripped) exactly as in a build.
 let testMacros: [String: MacroSpec] = [
     "EdgeCases": MacroSpec(type: EdgeCasesMacro.self, conformances: ["EdgeCaseGeneratable"]),
+    "EdgeCase": MacroSpec(type: EdgeCaseOverrideMacro.self),
 ]
 
 final class EdgeCaseTests: XCTestCase {
@@ -852,7 +854,7 @@ final class EdgeCaseTests: XCTestCase {
             """,
             diagnostics: [
                 DiagnosticSpec(
-                    message: "'@EdgeCases' has no generator for type '(Int, Int)' of stored property 'point' (tuples, functions, and existentials are not supported; use a named type conforming to 'EdgeCaseGeneratable')",
+                    message: "'@EdgeCases' has no generator for type '(Int, Int)' of stored property 'point' (tuples, functions, and existentials are not supported; use a named type conforming to 'EdgeCaseGeneratable', or attach '@EdgeCase(.custom([...]))')",
                     line: 3,
                     column: 9
                 )
@@ -925,6 +927,761 @@ final class EdgeCaseTests: XCTestCase {
                     message: "'@EdgeCases' requires an enum to declare at least one case",
                     line: 2,
                     column: 6
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Custom overrides (v0.3)
+
+    func testCustomOverrideReplacesGeneratedCases() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Patient {
+                @EdgeCase(.custom([0, 1, 149, 150]))
+                let age: Int
+                let isInsured: Bool
+            }
+            """,
+            expandedSource: """
+            struct Patient {
+                let age: Int
+                let isInsured: Bool
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(age: 0, isInsured: false),
+                        Self(age: 1, isInsured: false),
+                        Self(age: 149, isInsured: false),
+                        Self(age: 150, isInsured: false),
+                        Self(age: 0, isInsured: true),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(age: 0, isInsured: false)
+                }
+            }
+
+            extension Patient: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testCustomOverrideOnUnsupportedTypeSuppliesTheGenerator() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Canvas {
+                @EdgeCase(.custom([(0, 0), (-1, 1)]))
+                let origin: (Int, Int)
+            }
+            """,
+            expandedSource: """
+            struct Canvas {
+                let origin: (Int, Int)
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(origin: (0, 0)),
+                        Self(origin: (-1, 1)),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(origin: (0, 0))
+                }
+            }
+
+            extension Canvas: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testCustomOverrideOnCustomTypeReplacesRecursion() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Delivery {
+                @EdgeCase(.custom([Address.headquarters]))
+                let destination: Address
+            }
+            """,
+            expandedSource: """
+            struct Delivery {
+                let destination: Address
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(destination: Address.headquarters),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(destination: Address.headquarters)
+                }
+            }
+
+            extension Delivery: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Exclusion (v0.3)
+
+    func testExcludeWithDefaultValueOmitsTheProperty() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Screen {
+                let title: Bool
+                @EdgeCase(.exclude)
+                var theme: String = "dark"
+            }
+            """,
+            expandedSource: """
+            struct Screen {
+                let title: Bool
+                var theme: String = "dark"
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(title: true),
+                        Self(title: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(title: false)
+                }
+            }
+
+            extension Screen: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testExcludeWithoutDefaultHoldsTheBaseline() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Report {
+                let pages: Int
+                @EdgeCase(.exclude)
+                let watermark: String
+            }
+            """,
+            expandedSource: """
+            struct Report {
+                let pages: Int
+                let watermark: String
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(pages: Int.min, watermark: ""),
+                        Self(pages: Int.max, watermark: ""),
+                        Self(pages: 0, watermark: ""),
+                        Self(pages: -1, watermark: ""),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(pages: 0, watermark: "")
+                }
+            }
+
+            extension Report: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testExcludeOnCustomTypeSkipsTheRuntimeClause() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Wrapper {
+                let flag: Bool
+                @EdgeCase(.exclude)
+                let inner: Address
+            }
+            """,
+            expandedSource: """
+            struct Wrapper {
+                let flag: Bool
+                let inner: Address
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(flag: true, inner: Address.edgeCaseBaseline),
+                        Self(flag: false, inner: Address.edgeCaseBaseline),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(flag: false, inner: Address.edgeCaseBaseline)
+                }
+            }
+
+            extension Wrapper: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Minimal strategy (v0.3)
+
+    func testMinimalStrategyMixesEdgeCasesCyclingShorterLists() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .minimal)
+            struct Login {
+                let attempts: Int
+                let remember: Bool
+            }
+            """,
+            expandedSource: """
+            struct Login {
+                let attempts: Int
+                let remember: Bool
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(attempts: Int.min, remember: true),
+                        Self(attempts: Int.max, remember: false),
+                        Self(attempts: 0, remember: true),
+                        Self(attempts: -1, remember: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(attempts: 0, remember: false)
+                }
+            }
+
+            extension Login: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testMinimalStrategyWithNestedTypeEmitsRuntimeForm() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .minimal)
+            struct Profile {
+                let level: Int
+                let address: Address
+            }
+            """,
+            expandedSource: """
+            struct Profile {
+                let level: Int
+                let address: Address
+
+                static var edgeCases: [Self] {
+                    { () -> [Self] in
+                        let column0: [Int] = [Int.min, Int.max, 0, -1]
+                        let column1: [Address] = Address.edgeCases
+                        let count = max(column0.count, column1.count)
+                        return (0 ..< count).map { index in
+                            Self(level: column0[index % column0.count], address: column1[index % column1.count])
+                        }
+                    }()
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(level: 0, address: Address.edgeCaseBaseline)
+                }
+            }
+
+            extension Profile: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testMinimalStrategyWithOptionalCustomTypeCoercesTheColumn() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .minimal)
+            struct Delivery {
+                let destination: Address?
+            }
+            """,
+            expandedSource: """
+            struct Delivery {
+                let destination: Address?
+
+                static var edgeCases: [Self] {
+                    { () -> [Self] in
+                        let column0: [Address?] = [nil] + Address.edgeCases.map {
+                            $0 as Address?
+                        }
+                        let count = column0.count
+                        return (0 ..< count).map { index in
+                            Self(destination: column0[index % column0.count])
+                        }
+                    }()
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(destination: nil)
+                }
+            }
+
+            extension Delivery: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testMinimalStrategyOnEnumKeepsEveryCase() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .minimal)
+            enum Command {
+                case ping
+                case resize(Int, Int)
+            }
+            """,
+            expandedSource: """
+            enum Command {
+                case ping
+                case resize(Int, Int)
+
+                static var edgeCases: [Self] {
+                    [
+                        Self.ping,
+                        Self.resize(Int.min, Int.min),
+                        Self.resize(Int.max, Int.max),
+                        Self.resize(0, 0),
+                        Self.resize(-1, -1),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self.ping
+                }
+            }
+
+            extension Command: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Combinatorial strategy (v0.3)
+
+    func testCombinatorialStrategyEmitsTheCartesianProduct() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .combinatorial)
+            struct Toggle {
+                let count: Int8
+                let isOn: Bool
+            }
+            """,
+            expandedSource: """
+            struct Toggle {
+                let count: Int8
+                let isOn: Bool
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(count: Int8.min, isOn: true),
+                        Self(count: Int8.min, isOn: false),
+                        Self(count: Int8.max, isOn: true),
+                        Self(count: Int8.max, isOn: false),
+                        Self(count: 0, isOn: true),
+                        Self(count: 0, isOn: false),
+                        Self(count: -1, isOn: true),
+                        Self(count: -1, isOn: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(count: 0, isOn: false)
+                }
+            }
+
+            extension Toggle: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testCombinatorialStrategyWithNestedTypeEmitsCappedLoop() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .combinatorial)
+            struct Shipment {
+                let priority: Bool
+                let destination: Address
+            }
+            """,
+            expandedSource: """
+            struct Shipment {
+                let priority: Bool
+                let destination: Address
+
+                static var edgeCases: [Self] {
+                    { () -> [Self] in
+                        let column0: [Bool] = [true, false]
+                        let column1: [Address] = Address.edgeCases
+                        var instances: [Self] = []
+                        loop: for value0 in column0 {
+                            for value1 in column1 {
+                                if instances.count == 1_000 {
+                                    break loop
+                                }
+                                instances.append(Self(priority: value0, destination: value1))
+                            }
+                        }
+                        return instances
+                    }()
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(priority: false, destination: Address.edgeCaseBaseline)
+                }
+            }
+
+            extension Shipment: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testCombinatorialStrategyOverCapWarnsAndCaps() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .combinatorial)
+            struct Grid {
+                @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+                let x: Int
+                @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+                let y: Int
+                @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+                let z: Int
+            }
+            """,
+            expandedSource: """
+            struct Grid {
+                let x: Int
+                let y: Int
+                let z: Int
+
+                static var edgeCases: [Self] {
+                    { () -> [Self] in
+                        let column0: [Int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+                        let column1: [Int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+                        let column2: [Int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+                        var instances: [Self] = []
+                        loop: for value0 in column0 {
+                            for value1 in column1 {
+                                for value2 in column2 {
+                                    if instances.count == 1_000 {
+                                        break loop
+                                    }
+                                    instances.append(Self(x: value0, y: value1, z: value2))
+                                }
+                            }
+                        }
+                        return instances
+                    }()
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(x: 1, y: 1, z: 1)
+                }
+            }
+
+            extension Grid: EdgeCaseGeneratable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'.combinatorial' would generate 1331 instances; generation is capped at 1_000 (consider '.minimal', '.oneAtATime', or '@EdgeCase(.exclude)' on noisy properties)",
+                    line: 1,
+                    column: 1,
+                    severity: .warning
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testCombinatorialStrategyOnEnumMixesLiteralAndRuntimeCases() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .combinatorial)
+            enum Event {
+                case system
+                case user(Account)
+            }
+            """,
+            expandedSource: """
+            enum Event {
+                case system
+                case user(Account)
+
+                static var edgeCases: [Self] {
+                    [
+                        Self.system,
+                    ]
+                    + { () -> [Self] in
+                        let column0: [Account] = Account.edgeCases
+                        var instances: [Self] = []
+                        loop: for value0 in column0 {
+                            if instances.count == 1_000 {
+                                break loop
+                            }
+                            instances.append(Self.user(value0))
+                        }
+                        return instances
+                    }()
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self.system
+                }
+            }
+
+            extension Event: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    func testExplicitOneAtATimeStrategyMatchesTheDefault() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .oneAtATime)
+            struct Flag {
+                let isOn: Bool
+            }
+            """,
+            expandedSource: """
+            struct Flag {
+                let isOn: Bool
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(isOn: false)
+                }
+            }
+
+            extension Flag: EdgeCaseGeneratable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Diagnostics (v0.3)
+
+    func testDiagnosesInvalidStrategy() {
+        assertMacroExpansion(
+            """
+            @EdgeCases(strategy: .fancy)
+            struct Broken {
+                let value: Int
+            }
+            """,
+            expandedSource: """
+            struct Broken {
+                let value: Int
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'strategy' must be written as '.oneAtATime', '.minimal', or '.combinatorial'",
+                    line: 1,
+                    column: 22
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testDiagnosesCustomOverrideWithoutArrayLiteral() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Broken {
+                @EdgeCase(.custom(someValues))
+                let value: Int
+            }
+            """,
+            expandedSource: """
+            struct Broken {
+                let value: Int
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'.custom' requires its values written as an array literal, e.g. '.custom([0, 150])'",
+                    line: 3,
+                    column: 15
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testDiagnosesEmptyCustomOverride() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Broken {
+                @EdgeCase(.custom([]))
+                let value: Int
+            }
+            """,
+            expandedSource: """
+            struct Broken {
+                let value: Int
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'.custom' needs at least one value; the first value doubles as the property's baseline",
+                    line: 3,
+                    column: 23
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testDiagnosesExcludeOnUnsupportedTypeWithoutDefault() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Broken {
+                @EdgeCase(.exclude)
+                let point: (Int, Int)
+            }
+            """,
+            expandedSource: """
+            struct Broken {
+                let point: (Int, Int)
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'@EdgeCase(.exclude)' on 'point' needs a default value, because '(Int, Int)' has no built-in baseline to hold the property at",
+                    line: 4,
+                    column: 9
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testWarnsWhenOverridingAFixedConstant() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Config {
+                @EdgeCase(.custom([1, 2]))
+                let retries: Int = 3
+                let isOn: Bool
+            }
+            """,
+            expandedSource: """
+            struct Config {
+                let retries: Int = 3
+                let isOn: Bool
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(isOn: false)
+                }
+            }
+
+            extension Config: EdgeCaseGeneratable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'@EdgeCase' has no effect on 'retries': constants with a default value always keep their fixed value",
+                    line: 3,
+                    column: 5,
+                    severity: .warning
+                )
+            ],
+            macroSpecs: testMacros
+        )
+    }
+
+    func testWarnsWhenUnsupportedTypeFallsBackToItsDefault() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Layout {
+                let isOn: Bool
+                var origin: (Int, Int) = (0, 0)
+            }
+            """,
+            expandedSource: """
+            struct Layout {
+                let isOn: Bool
+                var origin: (Int, Int) = (0, 0)
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(isOn: false)
+                }
+            }
+
+            extension Layout: EdgeCaseGeneratable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'@EdgeCases' has no generator for type '(Int, Int)'; 'origin' keeps its default value in every generated instance (attach '@EdgeCase(.custom([...]))' to vary it, or '@EdgeCase(.exclude)' to silence this warning)",
+                    line: 4,
+                    column: 9,
+                    severity: .warning
                 )
             ],
             macroSpecs: testMacros

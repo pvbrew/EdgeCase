@@ -10,12 +10,19 @@ import SwiftSyntaxMacros
 /// `static var edgeCaseBaseline: Self`, and an `EdgeCaseGeneratable`
 /// conformance so annotated types can nest inside each other.
 ///
-/// Instances are generated one value at a time: each stored property (or
-/// enum associated value) is run through its type's edge cases while every
-/// other one holds a baseline value (`0`, `""`, `false`, `nil`, `[]`). Exact
-/// duplicates are dropped, so the case count grows linearly. Edge cases of
-/// nested `EdgeCaseGeneratable` types are only known at runtime, so they are
-/// spliced in with `map` over the nested type's `edgeCases`.
+/// The `strategy:` argument picks how property edge cases combine into
+/// instances: `.oneAtATime` (default) varies one property while the others
+/// hold a baseline value (`0`, `""`, `false`, `nil`, `[]`), `.minimal` mixes
+/// the i-th edge case of every property into instance i (cycling shorter
+/// lists), and `.combinatorial` emits the cartesian product, capped at
+/// 1,000 instances per constructed case with a warning when the known count
+/// exceeds the cap. Exact duplicates are dropped. Edge cases of nested
+/// `EdgeCaseGeneratable` types are only known at runtime, so they are
+/// spliced in with `map` (or, for the non-default strategies, an
+/// immediately-applied closure) over the nested type's `edgeCases`.
+///
+/// Per-property `@EdgeCase(.custom([...]))` and `@EdgeCase(.exclude)`
+/// markers replace or remove a property's contribution.
 public struct EdgeCasesMacro {}
 
 extension EdgeCasesMacro: MemberMacro {
@@ -25,20 +32,24 @@ extension EdgeCasesMacro: MemberMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        guard let analysis = EdgeCasesAnalysis(declaration) else {
+        guard let analysis = EdgeCasesAnalysis(node: node, declaration: declaration) else {
             context.diagnose(Diagnostic(node: node, message: EdgeCasesDiagnostic.unsupportedDeclaration))
             return []
         }
-        guard analysis.failures.isEmpty else {
-            for failure in analysis.failures {
-                context.diagnose(Diagnostic(node: failure.node, message: failure.message))
-            }
-            return []
+        for failure in analysis.failures {
+            context.diagnose(Diagnostic(node: failure.node, message: failure.message))
+        }
+        guard !analysis.hasErrors else { return [] }
+
+        if analysis.strategy == .combinatorial,
+           let count = InstanceGeneration.knownCombinatorialCount(for: analysis.constructors),
+           count > GenerationStrategy.combinatorialCap {
+            context.diagnose(
+                Diagnostic(node: node, message: EdgeCasesDiagnostic.combinatorialCapExceeded(count: count))
+            )
         }
 
-        let literals = InstanceGeneration.literalInstances(for: analysis.constructors)
-        let dynamics = InstanceGeneration.dynamicClauses(for: analysis.constructors)
-        let body = InstanceGeneration.body(literals: literals, dynamics: dynamics)
+        let body = InstanceGeneration.body(for: analysis.constructors, strategy: analysis.strategy)
         let access = analysis.accessModifier
 
         let edgeCases: DeclSyntax =
@@ -69,8 +80,8 @@ extension EdgeCasesMacro: ExtensionMacro {
         // Failures are diagnosed by the member expansion; here an invalid
         // declaration just gets no conformance.
         guard !protocols.isEmpty,
-              let analysis = EdgeCasesAnalysis(declaration),
-              analysis.failures.isEmpty
+              let analysis = EdgeCasesAnalysis(node: node, declaration: declaration),
+              !analysis.hasErrors
         else {
             return []
         }
@@ -78,9 +89,23 @@ extension EdgeCasesMacro: ExtensionMacro {
     }
 }
 
+/// Implementation of the `@EdgeCase(...)` per-property marker. It expands to
+/// nothing — the override it carries is read syntactically by the
+/// `@EdgeCases` expansion on the containing type.
+public struct EdgeCaseOverrideMacro: PeerMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        []
+    }
+}
+
 @main
 struct EdgeCasePlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         EdgeCasesMacro.self,
+        EdgeCaseOverrideMacro.self,
     ]
 }
