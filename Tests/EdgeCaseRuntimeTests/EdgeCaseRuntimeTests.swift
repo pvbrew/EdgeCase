@@ -139,8 +139,8 @@ final class EdgeCaseRuntimeTests: XCTestCase {
 }
 
 /// A hand-written conformance — how types the macro has no generator for
-/// (`Date`, `URL`, ...) join in. `edgeCaseBaseline` comes from the protocol's
-/// default implementation.
+/// join in. `edgeCaseBaseline` comes from the protocol's default
+/// implementation.
 struct Timestamp: Equatable, EdgeCaseGeneratable {
     static let distantPast = Timestamp(secondsSince1970: -62_135_596_800)
     static let distantFuture = Timestamp(secondsSince1970: 64_092_211_200)
@@ -155,4 +155,122 @@ struct Timestamp: Equatable, EdgeCaseGeneratable {
 @EdgeCases
 struct Stamped {
     let at: Timestamp
+}
+
+// MARK: - v0.3: overrides, strategies, Foundation conformances
+
+/// The v0.3 roadmap goal: a real domain model annotated without fighting the
+/// macro — a bounded domain override, excluded properties, and Foundation
+/// types.
+@EdgeCases
+struct Booking {
+    @EdgeCase(.custom([0, 1, 149, 150]))
+    let age: Int
+    @EdgeCase(.exclude)
+    var channel: String = "web"
+    @EdgeCase(.exclude)
+    let fingerprint: String
+    let id: UUID
+    let createdAt: Date
+    let site: URL
+}
+
+@EdgeCases(strategy: .minimal)
+struct MinimalForm {
+    let attempts: Int
+    let comment: String
+    let agreed: Bool
+}
+
+/// Exercises the minimal strategy's runtime form (a nested type's edge cases
+/// are only known at runtime).
+@EdgeCases(strategy: .minimal)
+struct MinimalNested {
+    let level: Int
+    let owner: Owner
+}
+
+@EdgeCases(strategy: .combinatorial)
+struct ComboPair {
+    let attempts: Int8
+    let agreed: Bool
+}
+
+/// Exercises the combinatorial runtime loop (nested enum payload).
+@EdgeCases(strategy: .combinatorial)
+struct ComboNested {
+    let agreed: Bool
+    let plan: Plan
+}
+
+/// 11 × 11 × 11 = 1,331 combinations — over the cap, so generation stops at
+/// exactly 1,000 instances (and the expansion emits a compile-time warning).
+@EdgeCases(strategy: .combinatorial)
+struct ComboCapped {
+    @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+    let x: Int
+    @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+    let y: Int
+    @EdgeCase(.custom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]))
+    let z: Int
+}
+
+final class EdgeCaseOverrideRuntimeTests: XCTestCase {
+
+    func testCustomOverrideBoundsTheDomain() {
+        let ages = Set(Booking.edgeCases.map(\.age))
+        XCTAssertEqual(ages, [0, 1, 149, 150], "age never leaves the custom domain")
+        XCTAssertEqual(Booking.edgeCaseBaseline.age, 0, "the first custom value is the baseline")
+    }
+
+    func testExcludedPropertiesNeverVary() {
+        XCTAssertTrue(Booking.edgeCases.allSatisfy { $0.channel == "web" }, "default value is kept")
+        XCTAssertTrue(Booking.edgeCases.allSatisfy { $0.fingerprint == "" }, "type baseline is held")
+    }
+
+    func testFoundationConformancesParticipate() {
+        XCTAssertTrue(Booking.edgeCases.contains { $0.createdAt == .distantFuture })
+        XCTAssertTrue(Booking.edgeCases.contains { $0.id.uuidString == "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF" })
+        XCTAssertTrue(Booking.edgeCases.contains { $0.site.isFileURL })
+        XCTAssertEqual(Date.edgeCaseBaseline, Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(URL.edgeCaseBaseline, URL(string: "https://example.com")!)
+        XCTAssertEqual(
+            UUID.edgeCaseBaseline,
+            UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        )
+    }
+}
+
+final class EdgeCaseStrategyRuntimeTests: XCTestCase {
+
+    func testMinimalCountIsTheLargestColumn() {
+        // String has the most edge cases (8); Int (4) and Bool (2) cycle.
+        XCTAssertEqual(MinimalForm.edgeCases.count, 8)
+        XCTAssertEqual(Set(MinimalForm.edgeCases.map(\.attempts)), [Int.min, Int.max, 0, -1])
+        XCTAssertTrue(MinimalForm.edgeCases.contains { $0.comment.count == 10_000 })
+        XCTAssertTrue(MinimalForm.edgeCases.allSatisfy { $0.attempts != 0 || $0.comment != "" || $0.agreed },
+                      "minimal has no all-baseline instance; every property carries an edge value")
+    }
+
+    func testMinimalRuntimeFormCyclesThroughNestedCases() {
+        XCTAssertEqual(MinimalNested.edgeCases.count, max(4, Owner.edgeCases.count))
+        XCTAssertEqual(Set(MinimalNested.edgeCases.map(\.level)), [Int.min, Int.max, 0, -1])
+        XCTAssertTrue(MinimalNested.edgeCases.contains { $0.owner.name.count == 10_000 })
+    }
+
+    func testCombinatorialCoversTheFullProduct() {
+        XCTAssertEqual(ComboPair.edgeCases.count, 4 * 2)
+        // Pairings one-at-a-time never produces.
+        XCTAssertTrue(ComboPair.edgeCases.contains { $0.attempts == .max && $0.agreed })
+        XCTAssertTrue(ComboPair.edgeCases.contains { $0.attempts == .min && $0.agreed })
+    }
+
+    func testCombinatorialRuntimeLoopCrossesNestedCases() {
+        XCTAssertEqual(ComboNested.edgeCases.count, 2 * Plan.edgeCases.count)
+        XCTAssertTrue(ComboNested.edgeCases.contains { $0.agreed && $0.plan == .paid(renewals: .max) })
+    }
+
+    func testCombinatorialGenerationIsCapped() {
+        XCTAssertEqual(ComboCapped.edgeCases.count, 1_000, "1,331 combinations are capped at 1,000")
+    }
 }

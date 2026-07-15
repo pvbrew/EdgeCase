@@ -40,6 +40,22 @@ final class EdgeCaseExampleTests: XCTestCase {
         }
     }
 
+    func testMemberSinceSurvivesAllEdgeCases() {
+        // .distantPast, .distantFuture, and the 32-bit rollover all render.
+        for user in User.edgeCases {
+            XCTAssertFalse(user.memberSince.isEmpty, "memberSince collapsed for \(user.joinedAt)")
+        }
+    }
+
+    func testWebsiteLabelSurvivesAllEdgeCases() {
+        // nil, scheme-less "a", a 2,000-character path, and file:// URLs.
+        for user in User.edgeCases {
+            let label = user.websiteLabel
+            XCTAssertFalse(label.isEmpty, "websiteLabel collapsed for \(String(describing: user.website))")
+            XCTAssertLessThanOrEqual(label.count, 24, "websiteLabel not truncated")
+        }
+    }
+
     func testEdgeCasesCoverTheValuesYouForget() {
         // v0.1 primitives.
         XCTAssertTrue(User.edgeCases.contains { $0.id == Int.max })
@@ -65,12 +81,30 @@ final class EdgeCaseExampleTests: XCTestCase {
         // v0.2: enums cover every case and vary associated values.
         XCTAssertTrue(User.edgeCases.contains { $0.membership == .free })
         XCTAssertTrue(User.edgeCases.contains { $0.membership == .pro(renewsInDays: Int.min) })
+
+        // v0.3: Date and URL join in through the bundled conformances.
+        XCTAssertTrue(User.edgeCases.contains { $0.joinedAt == .distantPast })
+        XCTAssertTrue(User.edgeCases.contains { $0.joinedAt == .distantFuture })
+        XCTAssertTrue(User.edgeCases.contains { $0.website == nil })
+        XCTAssertTrue(User.edgeCases.contains { $0.website?.isFileURL == true })
+    }
+
+    // v0.3: @EdgeCase(.custom([...])) bounds a property to its real domain.
+    func testCustomOverrideKeepsAgeInItsDomain() {
+        XCTAssertEqual(Set(User.edgeCases.map(\.age)), [0, 13, 118], "age never leaves the overridden domain")
+        XCTAssertTrue(User.edgeCases.contains { $0.age == 13 }, "the age-gate boundary itself is generated")
+    }
+
+    // v0.3: @EdgeCase(.exclude) pins a property to its default value.
+    func testExcludedPropertyNeverVaries() {
+        XCTAssertTrue(User.edgeCases.allSatisfy { $0.avatarSystemName == "person.crop.circle" })
     }
 
     func testCaseCountStaysLinear() {
         // One varied value per instance keeps the set reviewable — the sum of
-        // each property's cases, never a cartesian product.
-        XCTAssertLessThan(User.edgeCases.count, 60)
+        // each property's cases (12 properties ≈ 70 instances here), never a
+        // cartesian product (which would be astronomically large).
+        XCTAssertLessThan(User.edgeCases.count, 100)
     }
 }
 
@@ -90,5 +124,52 @@ final class TestLocalFixtureTests: XCTestCase {
         XCTAssertTrue(Payload.edgeCases.contains { $0.checksum == nil })
         XCTAssertTrue(Payload.edgeCases.contains { $0.checksum == Int64.max })
         XCTAssertTrue(Payload.edgeCases.contains { $0.chunks == [Int8.min, Int8.max, 0, -1] })
+    }
+}
+
+// MARK: - v0.3 strategies
+
+/// Cross-field validation is where `.combinatorial` earns its keep: every
+/// pairing of adversarial username × code, not just one adversary at a time.
+@EdgeCases(strategy: .combinatorial)
+struct LoginAttempt {
+    let username: String
+    let oneTimeCode: Int8
+}
+
+/// `.minimal` packs every edge value into the fewest instances — the
+/// smoke-test set you can afford to run in every build.
+@EdgeCases(strategy: .minimal)
+struct SearchQuery {
+    let text: String
+    let limit: Int
+    let exactMatch: Bool
+}
+
+final class StrategyFixtureTests: XCTestCase {
+
+    private func validate(_ attempt: LoginAttempt) -> Bool {
+        !attempt.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && attempt.oneTimeCode >= 0
+    }
+
+    func testCombinatorialCoversEveryPairing() {
+        // 8 username cases × 4 code cases — the full product.
+        XCTAssertEqual(LoginAttempt.edgeCases.count, 8 * 4)
+        XCTAssertTrue(
+            LoginAttempt.edgeCases.contains { $0.username.count == 10_000 && $0.oneTimeCode == .min },
+            "pairings one-at-a-time never produces"
+        )
+        for attempt in LoginAttempt.edgeCases {
+            _ = validate(attempt) // must not trap for any pairing
+        }
+    }
+
+    func testMinimalIsTheSmallestFullCoverageSet() {
+        // As many instances as the longest column (String's 8 cases); Int
+        // and Bool cycle, so every edge value still appears.
+        XCTAssertEqual(SearchQuery.edgeCases.count, 8)
+        XCTAssertEqual(Set(SearchQuery.edgeCases.map(\.limit)), [Int.min, Int.max, 0, -1])
+        XCTAssertTrue(SearchQuery.edgeCases.contains { $0.text.count == 10_000 })
     }
 }

@@ -1,12 +1,15 @@
 import EdgeCase
 import Foundation
 
-/// The kind of model you'd ship in a real app — now with the v0.2 shapes
-/// that cause real-world crashes: an optional, an array, a nested custom
-/// type, and an enum. `@EdgeCases` generates `User.edgeCases` — one instance
-/// per boundary value of each property, recursing into `Address` and
-/// `Membership` through their own generated `EdgeCaseGeneratable`
-/// conformances.
+/// The kind of model you'd ship in a real app — now with the v0.3 shapes
+/// that make the macro usable on real domain models:
+///
+/// - `@EdgeCase(.custom([...]))` keeps `age` inside its real domain (and
+///   lands exactly on the age-gate boundary) instead of `Int.min`/`Int.max`.
+/// - `@EdgeCase(.exclude)` pins `avatarSystemName` to its default — varying
+///   a cosmetic asset name would only add noise.
+/// - `joinedAt: Date` and `website: URL?` join generation through the
+///   `EdgeCaseGeneratable` conformances that ship with EdgeCase.
 ///
 /// `nonisolated` opts the models out of the app target's default MainActor
 /// isolation, so `edgeCases` stays callable from any context — including
@@ -15,12 +18,18 @@ import Foundation
 nonisolated struct User {
     let id: Int
     let username: String
+    @EdgeCase(.custom([0, 13, 118]))
+    let age: Int
     let karma: Double
     var isVerified: Bool
     let bio: String?
     let tags: [String]
     let address: Address
     let membership: Membership
+    let joinedAt: Date
+    let website: URL?
+    @EdgeCase(.exclude)
+    var avatarSystemName: String = "person.crop.circle"
 }
 
 @EdgeCases
@@ -76,6 +85,30 @@ nonisolated extension User {
         case .pro(let renewsInDays):
             return renewsInDays >= 0 ? "Pro · renews in \(renewsInDays)d" : "Pro · expired"
         }
+    }
+
+    /// Age-gate badge — the custom override generates 0, 13, and 118, so the
+    /// gate is tested exactly on its boundary instead of at `Int.min`.
+    var audienceBadge: String {
+        switch age {
+        case ..<13: "Kids"
+        case 13 ..< 18: "Teen"
+        default: "Adult"
+        }
+    }
+
+    /// Member-since line — must survive `.distantPast`, `.distantFuture`,
+    /// and the 32-bit rollover date.
+    var memberSince: String {
+        "Joined \(joinedAt.formatted(.dateTime.year()))"
+    }
+
+    /// Website chip — must survive `nil`, a scheme-less single character, a
+    /// 2,000-character path, and file URLs.
+    var websiteLabel: String {
+        guard let website else { return "No website" }
+        let label = website.host() ?? website.absoluteString
+        return String(label.prefix(24))
     }
 }
 
