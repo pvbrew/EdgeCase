@@ -1,5 +1,7 @@
 # EdgeCase
 
+[![CI](https://github.com/pvbrew/EdgeCase/actions/workflows/ci.yml/badge.svg)](https://github.com/pvbrew/EdgeCase/actions/workflows/ci.yml)
+
 You test the happy path. `@EdgeCases` generates the ones you forgot — the empty string, the `Int.max`, the `NaN` — in one line.
 
 EdgeCase is a Swift macro that inspects the stored properties of a struct and generates a `static var edgeCases: [Self]` full of boundary and adversarial values, ready to feed into your tests.
@@ -24,6 +26,7 @@ func testProfileRendering() {
 
 ```swift
 import EdgeCase
+import Testing
 
 @EdgeCases
 struct User {
@@ -32,10 +35,9 @@ struct User {
     var isActive: Bool
 }
 
-func testProfileRendering() {
-    for user in User.edgeCases {
-        XCTAssertNoThrow(try render(user))
-    }
+@Test(arguments: User.edgeCases)
+func profileRendering(user: User) throws {
+    try render(user)
 }
 ```
 
@@ -60,9 +62,9 @@ static var edgeCases: [Self] {
 }
 ```
 
-…plus a `static var edgeCaseBaseline: Self` and an `EdgeCaseGeneratable` conformance, so annotated types can nest inside each other.
+…plus a `static var edgeCaseBaseline: Self`, an `EdgeCaseGeneratable` conformance so annotated types can nest inside each other, and — for structs — a `static func edgeCases(varying:)` that composes edge cases around a realistic fixture (see [Composing with fixtures](#composing-with-fixtures-v04)).
 
-## Built-in generators (v0.3)
+## Built-in generators
 
 | Type | Edge cases |
 | --- | --- |
@@ -119,6 +121,65 @@ Overrides apply to stored instance properties of structs; the macro warns when o
 | `.minimal` | max(4, 8, 2) = 8 | Instance *i* takes the *i*-th edge case of *every* property (shorter lists cycle). The smallest set that still uses every edge value — a cheap smoke-test suite. |
 | `.combinatorial` | 4 × 8 × 2 = 64 | The full cartesian product, for cross-field validation bugs that only appear when two adversarial values meet. Capped at 1,000 instances, with a compile-time warning when the cap is exceeded. |
 
+## Drop into your test suite (v0.4)
+
+Two companion products plug the generated cases into either test framework. Both link a testing framework, so add them to test targets only:
+
+```swift
+.testTarget(
+    name: "MyAppTests",
+    dependencies: [
+        .product(name: "EdgeCase", package: "EdgeCase"),
+        .product(name: "EdgeCaseTesting", package: "EdgeCase"),  // swift-testing
+        .product(name: "EdgeCaseXCTest", package: "EdgeCase"),   // XCTest
+    ]
+)
+```
+
+### swift-testing
+
+`edgeCases` is a plain `[Self]`, so it feeds `@Test(arguments:)` directly — one test *case* per instance, and a failure names the exact adversarial value. For readable output, `EdgeCaseTesting`'s `labeledEdgeCases` wraps each instance with a short indexed label instead of a 10,000-character description:
+
+```swift
+import EdgeCaseTesting
+
+@Test(arguments: User.labeledEdgeCases)
+func profileRendering(_ edgeCase: LabeledEdgeCase<User>) throws {
+    try render(edgeCase.value)   // shown as "[3] User(id: 92233…" in the navigator
+}
+```
+
+### XCTest
+
+`EdgeCaseXCTest` adds the sugar from the roadmap — and unlike the standard `XCTAssertNoThrow`, it keeps iterating past failures, reporting every offending instance with its position and an abbreviated description:
+
+```swift
+import EdgeCaseXCTest
+
+func testProfileRendering() {
+    XCTAssertNoThrow(forEachEdgeCase: User.self) { user in
+        try render(user)
+    }
+}
+```
+
+An overload takes explicit case lists: `XCTAssertNoThrow(forEach: cases) { ... }`.
+
+## Composing with fixtures (v0.4)
+
+Generated edge cases are all-neutral except the varied property. If you build realistic instances with a fixtures-style library (or a hand-rolled `.fixture()` factory), the generated `EdgeCaseComposable` conformance composes the two — `edgeCases(varying:)` keeps the base's values while one property at a time takes its edge cases:
+
+```swift
+let user = User.fixture()   // realistic: name "Ada", 34 followers, …
+
+@Test(arguments: User.edgeCases(varying: user))
+func profileRendering(user: User) throws {
+    try render(user)        // realistic user, one adversarial field
+}
+```
+
+Excluded properties keep the fixture's values instead of reapplying their defaults, and composition is always one-property-at-a-time regardless of the declared strategy — holding everything else at the fixture is the point. Structs get the conformance; enums don't (a base enum value is a single case, and its adversaries are simply the other cases).
+
 ## Nested types and enums
 
 Annotated types conform to `EdgeCaseGeneratable`, so they compose — and enums get every case with their associated values varied:
@@ -164,7 +225,7 @@ Under the default `.oneAtATime` strategy, one property varies at a time while th
 
 The macro fails loudly instead of generating something surprising: unsupported property types without a default value are compile-time errors, and it warns — pointing at the fix — when a property type has no generator but a default value to fall back on, when an override can have no effect, and when `.combinatorial` blows past the 1,000-instance cap.
 
-### Requirements & limitations (v0.3)
+### Requirements & limitations (v0.4)
 
 - Swift 6.0+, iOS 17+ / macOS 10.15+
 - Structs and enums; every varied stored property or associated value must be a supported type, a type conforming to `EdgeCaseGeneratable`, or a collection/optional of those — or carry an `@EdgeCase(.custom([...]))` override
@@ -173,6 +234,7 @@ The macro fails loudly instead of generating something surprising: unsupported p
 - `@EdgeCase` overrides work on struct properties, not on enum associated values
 - Recursive types (`struct Node { let next: Node? }`) would recurse infinitely at runtime — don't annotate them
 - A custom `EdgeCaseGeneratable` conformance must return a non-empty `edgeCases`
+- In modules with main-actor default isolation (Xcode's "Approachable Concurrency" app templates), declare the annotated type `nonisolated` — the generated conformances mirror the modifier, keeping `edgeCases` callable from nonisolated test code
 
 ## Installation
 
@@ -180,17 +242,19 @@ Swift Package Manager only. In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "0.3.0")
+    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "0.4.0")
 ]
 ```
 
-and add the product to your test target:
+and add the products to your test target — `EdgeCase` for the macro, plus the [integration companion](#drop-into-your-test-suite-v04) for your test framework:
 
 ```swift
 .testTarget(
     name: "MyAppTests",
     dependencies: [
-        .product(name: "EdgeCase", package: "EdgeCase")
+        .product(name: "EdgeCase", package: "EdgeCase"),
+        .product(name: "EdgeCaseTesting", package: "EdgeCase"),  // swift-testing helpers
+        .product(name: "EdgeCaseXCTest", package: "EdgeCase"),   // XCTest helpers
     ]
 )
 ```
@@ -199,12 +263,17 @@ Or in Xcode: **File ▸ Add Package Dependencies…** and paste the repo URL.
 
 ## Example
 
-An example iOS app is available in [`Examples/EdgeCaseExample`](Examples/EdgeCaseExample). Its SwiftUI screen renders every generated `User` instance — including the 10,000-character username, `NaN` karma, `nil` bio, 1,000-tag array, right-to-left city name, `.distantPast` join date, and `file://` website — with `age` bounded to its real domain by `@EdgeCase(.custom([...]))` and a cosmetic property pinned by `@EdgeCase(.exclude)`. Its unit test target shows the canonical workflow plus `.minimal` and `.combinatorial` fixtures declared directly in the test bundle.
+An example iOS app is available in [`Examples/EdgeCaseExample`](Examples/EdgeCaseExample). Its SwiftUI screen renders every generated `User` instance — including the 10,000-character username, `NaN` karma, `nil` bio, 1,000-tag array, right-to-left city name, `.distantPast` join date, and `file://` website — with `age` bounded to its real domain by `@EdgeCase(.custom([...]))` and a cosmetic property pinned by `@EdgeCase(.exclude)`. Its test target shows both integrations side by side: a swift-testing suite driving `@Test(arguments:)` with labeled edge cases and fixture composition, and an XCTest suite using `XCTAssertNoThrow(forEachEdgeCase:)` next to the canonical loop-based workflow.
+
+## Documentation
+
+The DocC catalog ships with the package — open the EdgeCase scheme in Xcode and run **Product ▸ Build Documentation**, or start with the [Getting Started](Sources/EdgeCase/EdgeCase.docc/GettingStarted.md) and [Testing Integration](Sources/EdgeCase/EdgeCase.docc/TestingIntegration.md) articles.
 
 ## Roadmap
 
-- **v0.4** — XCTest / swift-testing helpers, CI, DocC
-- **v1.0** — API freeze, full documentation
+- **v1.0** — API freeze, full documentation, hosted docs
+
+Shipped: **v0.1** core macro & primitives · **v0.2** optionals, collections, unicode, nesting, enums · **v0.3** overrides, strategies, Foundation conformances · **v0.4** swift-testing & XCTest integration, fixture composition, CI, DocC
 
 ## License
 

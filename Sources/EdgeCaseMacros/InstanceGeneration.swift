@@ -138,6 +138,23 @@ enum InstanceGeneration {
         return assemble(literals: literals, runtimeClauses: runtimeClauses)
     }
 
+    /// Assembles the body of `edgeCases(varying:)`: one property at a time
+    /// takes its edge cases while the rest hold `base.<property>`. Always
+    /// one-at-a-time regardless of the declared strategy — keeping the rest
+    /// of the instance at `base` is the point of composing with a fixture.
+    ///
+    /// A struct with nothing to vary (every property excluded or fixed)
+    /// yields the base reconstruction as its only instance, mirroring the
+    /// baseline-only instance `edgeCases` generates.
+    static func varyingBody(for constructor: InstanceConstructor) -> String {
+        var literals = oneAtATimeRows(for: [constructor])
+        let runtimeClauses = oneAtATimeDynamicClauses(for: [constructor])
+        if literals.isEmpty && runtimeClauses.isEmpty {
+            literals = [constructor.baselineExpression]
+        }
+        return assemble(literals: literals, runtimeClauses: runtimeClauses)
+    }
+
     /// The `.combinatorial` case count when every slot is literal, or `nil`
     /// when any constructor depends on runtime values. Drives the cap warning.
     static func knownCombinatorialCount(for constructors: [InstanceConstructor]) -> Int? {

@@ -1,8 +1,30 @@
 import EdgeCase
+import EdgeCaseXCTest
 import XCTest
 @testable import EdgeCaseExample
 
 final class EdgeCaseExampleTests: XCTestCase {
+
+    // MARK: v0.4: the XCTest sugar
+
+    /// One line instead of the loop: runs the body once per generated
+    /// instance and reports every failing case with an abbreviated
+    /// description (no 10,000-character usernames in the log).
+    func testCardExportSurvivesAllEdgeCases() {
+        XCTAssertNoThrow(forEachEdgeCase: User.self) { user in
+            _ = try user.exportCard()
+        }
+    }
+
+    /// The `forEach:` overload takes any explicit case list — here the
+    /// fixture-composed cases: a realistic profile, one adversary at a time.
+    func testCardExportSurvivesComposedCases() {
+        XCTAssertNoThrow(forEach: User.edgeCases(varying: .fixture())) { user in
+            _ = try user.exportCard()
+        }
+    }
+
+    // MARK: The canonical loop-based workflow
 
     /// The canonical EdgeCase workflow: run every generated adversarial
     /// instance through the code under test instead of hand-writing fixtures.

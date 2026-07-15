@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		EDCA5E0000000000000000F4 /* EdgeCase in Frameworks */ = {isa = PBXBuildFile; productRef = EDCA5E0000000000000000F2 /* EdgeCase */; };
 		EDCA5E0000000000000000F5 /* EdgeCase in Frameworks */ = {isa = PBXBuildFile; productRef = EDCA5E0000000000000000F3 /* EdgeCase */; };
+		EDCA5E0000000000000000FA /* EdgeCaseXCTest in Frameworks */ = {isa = PBXBuildFile; productRef = EDCA5E0000000000000000F8 /* EdgeCaseXCTest */; };
+		EDCA5E0000000000000000FB /* EdgeCaseTesting in Frameworks */ = {isa = PBXBuildFile; productRef = EDCA5E0000000000000000F9 /* EdgeCaseTesting */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +55,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				EDCA5E0000000000000000F5 /* EdgeCase in Frameworks */,
+				EDCA5E0000000000000000FA /* EdgeCaseXCTest in Frameworks */,
+				EDCA5E0000000000000000FB /* EdgeCaseTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +125,8 @@
 			name = EdgeCaseExampleTests;
 			packageProductDependencies = (
 				EDCA5E0000000000000000F3 /* EdgeCase */,
+				EDCA5E0000000000000000F8 /* EdgeCaseXCTest */,
+				EDCA5E0000000000000000F9 /* EdgeCaseTesting */,
 			);
 			productName = EdgeCaseExampleTests;
 			productReference = EDCA5E0000000000000000C2 /* EdgeCaseExampleTests.xctest */;
@@ -476,6 +482,14 @@
 		EDCA5E0000000000000000F3 /* EdgeCase */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = EdgeCase;
+		};
+		EDCA5E0000000000000000F8 /* EdgeCaseXCTest */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EdgeCaseXCTest;
+		};
+		EDCA5E0000000000000000F9 /* EdgeCaseTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EdgeCaseTesting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

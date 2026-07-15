@@ -23,6 +23,12 @@ import SwiftSyntaxMacros
 ///
 /// Per-property `@EdgeCase(.custom([...]))` and `@EdgeCase(.exclude)`
 /// markers replace or remove a property's contribution.
+///
+/// Structs additionally get `static func edgeCases(varying base: Self)` —
+/// the fixtures integration point: instances that keep `base`'s values while
+/// one property at a time takes its edge cases. Non-varied and passed-over
+/// properties (excluded or unsupported, with a default value) hold
+/// `base.<property>`, so a fixture's realistic values survive composition.
 public struct EdgeCasesMacro {}
 
 extension EdgeCasesMacro: MemberMacro {
@@ -64,7 +70,19 @@ extension EdgeCasesMacro: MemberMacro {
                 \(raw: analysis.baselineExpression)
             }
             """
-        return [edgeCases, baseline]
+        var members = [edgeCases, baseline]
+
+        if let varyingConstructor = analysis.varyingConstructor {
+            let varyingBody = InstanceGeneration.varyingBody(for: varyingConstructor)
+            members.append(
+                """
+                \(raw: access)static func edgeCases(varying base: Self) -> [Self] {
+                    \(raw: varyingBody)
+                }
+                """
+            )
+        }
+        return members
     }
 }
 
@@ -76,16 +94,34 @@ extension EdgeCasesMacro: ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-        // `protocols` is empty when the conformance is already declared.
-        // Failures are diagnosed by the member expansion; here an invalid
-        // declaration just gets no conformance.
+        // `protocols` holds the declared conformances not already present on
+        // the type. Failures are diagnosed by the member expansion; here an
+        // invalid declaration just gets no conformance. Enums do not get
+        // `EdgeCaseComposable` — they have no `edgeCases(varying:)` member
+        // to witness it.
         guard !protocols.isEmpty,
               let analysis = EdgeCasesAnalysis(node: node, declaration: declaration),
               !analysis.hasErrors
         else {
             return []
         }
-        return [try ExtensionDeclSyntax("extension \(type.trimmed): EdgeCaseGeneratable {}")]
+        // Mirror a `nonisolated` modifier onto the conformances: in modules
+        // with main-actor default isolation, an unannotated conformance is
+        // inferred main-actor-isolated even on a nonisolated type, making
+        // `edgeCases` unusable from nonisolated test contexts.
+        let isNonisolated = declaration.modifiers.contains {
+            $0.name.tokenKind == .keyword(.nonisolated)
+        }
+        let conformances = protocols
+            .map(\.trimmedDescription)
+            .filter { analysis.varyingConstructor != nil || $0 != "EdgeCaseComposable" }
+            .map { isNonisolated ? "nonisolated \($0)" : $0 }
+        guard !conformances.isEmpty else { return [] }
+        return [
+            try ExtensionDeclSyntax(
+                "extension \(type.trimmed): \(raw: conformances.joined(separator: ", ")) {}"
+            )
+        ]
     }
 }
 

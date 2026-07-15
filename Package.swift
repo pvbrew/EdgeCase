@@ -13,6 +13,17 @@ let package = Package(
             name: "EdgeCase",
             targets: ["EdgeCase"]
         ),
+        // Companion products for test targets only: XCTest sugar and
+        // swift-testing support. Kept separate from EdgeCase so app targets
+        // never link a testing framework.
+        .library(
+            name: "EdgeCaseXCTest",
+            targets: ["EdgeCaseXCTest"]
+        ),
+        .library(
+            name: "EdgeCaseTesting",
+            targets: ["EdgeCaseTesting"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.0-latest"),
@@ -32,6 +43,14 @@ let package = Package(
         // Library that exposes a macro as part of its API, which is used in client programs.
         .target(name: "EdgeCase", dependencies: ["EdgeCaseMacros"]),
 
+        // XCTest integration: `XCTAssertNoThrow(forEachEdgeCase:)`. Add to
+        // test targets only.
+        .target(name: "EdgeCaseXCTest", dependencies: ["EdgeCase"]),
+
+        // swift-testing integration: labeled `@Test(arguments:)` support.
+        // Add to test targets only.
+        .target(name: "EdgeCaseTesting", dependencies: ["EdgeCase"]),
+
         // A test target used to develop the macro implementation.
         .testTarget(
             name: "EdgeCaseTests",
@@ -46,6 +65,19 @@ let package = Package(
         .testTarget(
             name: "EdgeCaseRuntimeTests",
             dependencies: ["EdgeCase"]
+        ),
+
+        // Exercises the XCTest sugar, including its failure reporting.
+        .testTarget(
+            name: "EdgeCaseXCTestTests",
+            dependencies: ["EdgeCaseXCTest"]
+        ),
+
+        // swift-testing suite driving `@Test(arguments:)` end-to-end with
+        // labeled edge cases.
+        .testTarget(
+            name: "EdgeCaseTestingTests",
+            dependencies: ["EdgeCaseTesting"]
         ),
     ],
     swiftLanguageModes: [.v6]
