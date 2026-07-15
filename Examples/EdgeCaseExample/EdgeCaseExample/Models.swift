@@ -119,3 +119,22 @@ nonisolated extension Address {
         return trimmed.isEmpty ? "Unknown city" : String(trimmed.prefix(24))
     }
 }
+
+/// The share-sheet payload — a throwing surface for
+/// `XCTAssertNoThrow(forEachEdgeCase:)` to guard (v0.4).
+nonisolated struct ProfileCard: Codable {
+    let name: String
+    let karma: String
+    let city: String
+}
+
+nonisolated extension User {
+    /// Serializes the profile for sharing. Encoding the raw `karma: Double`
+    /// would throw for `.nan` and `.infinity` (JSON has no representation
+    /// for them) — encoding the formatted string survives every edge case.
+    func exportCard() throws -> Data {
+        try JSONEncoder().encode(
+            ProfileCard(name: displayName, karma: formattedKarma, city: address.displayCity)
+        )
+    }
+}

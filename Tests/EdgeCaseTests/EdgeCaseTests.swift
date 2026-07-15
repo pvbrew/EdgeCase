@@ -14,7 +14,10 @@ import EdgeCaseMacros
 /// extension role the way the compiler does. The `@EdgeCase` marker is
 /// registered too, so it is consumed (and stripped) exactly as in a build.
 let testMacros: [String: MacroSpec] = [
-    "EdgeCases": MacroSpec(type: EdgeCasesMacro.self, conformances: ["EdgeCaseGeneratable"]),
+    "EdgeCases": MacroSpec(
+        type: EdgeCasesMacro.self,
+        conformances: ["EdgeCaseGeneratable", "EdgeCaseComposable"]
+    ),
     "EdgeCase": MacroSpec(type: EdgeCaseOverrideMacro.self),
 ]
 
@@ -51,9 +54,22 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(x: 0, y: 0)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(x: Int.min, y: base.y),
+                        Self(x: Int.max, y: base.y),
+                        Self(x: 0, y: base.y),
+                        Self(x: -1, y: base.y),
+                        Self(x: base.x, y: Int.min),
+                        Self(x: base.x, y: Int.max),
+                        Self(x: base.x, y: 0),
+                        Self(x: base.x, y: -1),
+                    ]
+                }
             }
 
-            extension Coordinate: EdgeCaseGeneratable {
+            extension Coordinate: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -84,9 +100,18 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(value: 0)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(value: Int8.min),
+                        Self(value: Int8.max),
+                        Self(value: 0),
+                        Self(value: -1),
+                    ]
+                }
             }
 
-            extension Sample: EdgeCaseGeneratable {
+            extension Sample: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -118,9 +143,19 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(value: 0)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(value: -Double.greatestFiniteMagnitude),
+                        Self(value: Double.greatestFiniteMagnitude),
+                        Self(value: 0),
+                        Self(value: Double.nan),
+                        Self(value: Double.infinity),
+                    ]
+                }
             }
 
-            extension Measurement: EdgeCaseGeneratable {
+            extension Measurement: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -155,9 +190,22 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(text: "")
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(text: ""),
+                        Self(text: "a"),
+                        Self(text: String(repeating: "a", count: 10_000)),
+                        Self(text: " \t\n"),
+                        Self(text: "\u{1F9D1}\u{200D}\u{1F680}\u{1F44D}\u{1F3FD}\u{1F1EC}\u{1F1F7}"),
+                        Self(text: "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627} \u{05E9}\u{05DC}\u{05D5}\u{05DD}"),
+                        Self(text: "a\u{200B}b\u{200C}c\u{200D}d"),
+                        Self(text: "Cafe\u{0301}"),
+                    ]
+                }
             }
 
-            extension Message: EdgeCaseGeneratable {
+            extension Message: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """#,
             macroSpecs: testMacros
@@ -186,9 +234,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(isOn: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
             }
 
-            extension Flag: EdgeCaseGeneratable {
+            extension Flag: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -231,9 +286,28 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(id: 0, name: "", isActive: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(id: Int.min, name: base.name, isActive: base.isActive),
+                        Self(id: Int.max, name: base.name, isActive: base.isActive),
+                        Self(id: 0, name: base.name, isActive: base.isActive),
+                        Self(id: -1, name: base.name, isActive: base.isActive),
+                        Self(id: base.id, name: "", isActive: base.isActive),
+                        Self(id: base.id, name: "a", isActive: base.isActive),
+                        Self(id: base.id, name: String(repeating: "a", count: 10_000), isActive: base.isActive),
+                        Self(id: base.id, name: " \t\n", isActive: base.isActive),
+                        Self(id: base.id, name: "\u{1F9D1}\u{200D}\u{1F680}\u{1F44D}\u{1F3FD}\u{1F1EC}\u{1F1F7}", isActive: base.isActive),
+                        Self(id: base.id, name: "\u{0645}\u{0631}\u{062D}\u{0628}\u{0627} \u{05E9}\u{05DC}\u{05D5}\u{05DD}", isActive: base.isActive),
+                        Self(id: base.id, name: "a\u{200B}b\u{200C}c\u{200D}d", isActive: base.isActive),
+                        Self(id: base.id, name: "Cafe\u{0301}", isActive: base.isActive),
+                        Self(id: base.id, name: base.name, isActive: true),
+                        Self(id: base.id, name: base.name, isActive: false),
+                    ]
+                }
             }
 
-            extension User: EdgeCaseGeneratable {
+            extension User: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """#,
             macroSpecs: testMacros
@@ -264,9 +338,18 @@ final class EdgeCaseTests: XCTestCase {
                 public static var edgeCaseBaseline: Self {
                     Self(points: 0)
                 }
+
+                public static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(points: Int.min),
+                        Self(points: Int.max),
+                        Self(points: 0),
+                        Self(points: -1),
+                    ]
+                }
             }
 
-            extension Score: EdgeCaseGeneratable {
+            extension Score: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -306,9 +389,20 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(retries: 0, verbose: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(retries: Int.min, verbose: base.verbose),
+                        Self(retries: Int.max, verbose: base.verbose),
+                        Self(retries: 0, verbose: base.verbose),
+                        Self(retries: -1, verbose: base.verbose),
+                        Self(retries: base.retries, verbose: true),
+                        Self(retries: base.retries, verbose: false),
+                    ]
+                }
             }
 
-            extension Config: EdgeCaseGeneratable {
+            extension Config: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -342,9 +436,22 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(x: 0, y: 0)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(x: Int.min, y: base.y),
+                        Self(x: Int.max, y: base.y),
+                        Self(x: 0, y: base.y),
+                        Self(x: -1, y: base.y),
+                        Self(x: base.x, y: Int.min),
+                        Self(x: base.x, y: Int.max),
+                        Self(x: base.x, y: 0),
+                        Self(x: base.x, y: -1),
+                    ]
+                }
             }
 
-            extension Point: EdgeCaseGeneratable {
+            extension Point: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -370,9 +477,15 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self()
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(),
+                    ]
+                }
             }
 
-            extension Empty: EdgeCaseGeneratable {
+            extension Empty: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -412,9 +525,24 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(age: nil, bonus: nil)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(age: nil, bonus: base.bonus),
+                        Self(age: Int.min, bonus: base.bonus),
+                        Self(age: Int.max, bonus: base.bonus),
+                        Self(age: 0, bonus: base.bonus),
+                        Self(age: -1, bonus: base.bonus),
+                        Self(age: base.age, bonus: nil),
+                        Self(age: base.age, bonus: Int.min),
+                        Self(age: base.age, bonus: Int.max),
+                        Self(age: base.age, bonus: 0),
+                        Self(age: base.age, bonus: -1),
+                    ]
+                }
             }
 
-            extension Form: EdgeCaseGeneratable {
+            extension Form: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -452,9 +580,22 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(counts: [], bytes: [])
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(counts: [], bytes: base.bytes),
+                        Self(counts: [0], bytes: base.bytes),
+                        Self(counts: Array(repeating: 0, count: 1_000), bytes: base.bytes),
+                        Self(counts: [Int.min, Int.max, 0, -1], bytes: base.bytes),
+                        Self(counts: base.counts, bytes: []),
+                        Self(counts: base.counts, bytes: [0]),
+                        Self(counts: base.counts, bytes: Array(repeating: 0, count: 1_000)),
+                        Self(counts: base.counts, bytes: [Int8.min, Int8.max, 0, -1]),
+                    ]
+                }
             }
 
-            extension Basket: EdgeCaseGeneratable {
+            extension Basket: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -488,9 +629,19 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(stock: [:], ids: [], flags: [])
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(stock: [:], ids: base.ids, flags: base.flags),
+                        Self(stock: Dictionary(uniqueKeysWithValues: zip((0 ..< 1_000).map(String.init), repeatElement(0, count: 1_000))), ids: base.ids, flags: base.flags),
+                        Self(stock: base.stock, ids: [], flags: base.flags),
+                        Self(stock: base.stock, ids: Set(0 ..< 1_000), flags: base.flags),
+                        Self(stock: base.stock, ids: base.ids, flags: []),
+                    ]
+                }
             }
 
-            extension Catalog: EdgeCaseGeneratable {
+            extension Catalog: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -522,9 +673,19 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(attachments: nil)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(attachments: nil),
+                        Self(attachments: []),
+                        Self(attachments: [0]),
+                        Self(attachments: Array(repeating: 0, count: 1_000)),
+                        Self(attachments: [Int.min, Int.max, 0, -1]),
+                    ]
+                }
             }
 
-            extension Draft: EdgeCaseGeneratable {
+            extension Draft: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -562,9 +723,21 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(level: 0, address: Address.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(level: Int.min, address: base.address),
+                        Self(level: Int.max, address: base.address),
+                        Self(level: 0, address: base.address),
+                        Self(level: -1, address: base.address),
+                    ]
+                    + Address.edgeCases.map {
+                        Self(level: base.level, address: $0)
+                    }
+                }
             }
 
-            extension Profile: EdgeCaseGeneratable {
+            extension Profile: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -592,9 +765,15 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(inner: Address.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    Address.edgeCases.map {
+                        Self(inner: $0)
+                    }
+                }
             }
 
-            extension Wrapper: EdgeCaseGeneratable {
+            extension Wrapper: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -625,9 +804,18 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(destination: nil)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(destination: nil),
+                    ]
+                    + Address.edgeCases.map {
+                        Self(destination: $0)
+                    }
+                }
             }
 
-            extension Delivery: EdgeCaseGeneratable {
+            extension Delivery: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -658,9 +846,18 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(stops: [])
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(stops: []),
+                        Self(stops: [Address.edgeCaseBaseline]),
+                        Self(stops: Array(repeating: Address.edgeCaseBaseline, count: 1_000)),
+                        Self(stops: Address.edgeCases),
+                    ]
+                }
             }
 
-            extension Route: EdgeCaseGeneratable {
+            extension Route: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -688,9 +885,15 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(createdAt: Date.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    Date.edgeCases.map {
+                        Self(createdAt: $0)
+                    }
+                }
             }
 
-            extension Event: EdgeCaseGeneratable {
+            extension Event: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -963,9 +1166,20 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(age: 0, isInsured: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(age: 0, isInsured: base.isInsured),
+                        Self(age: 1, isInsured: base.isInsured),
+                        Self(age: 149, isInsured: base.isInsured),
+                        Self(age: 150, isInsured: base.isInsured),
+                        Self(age: base.age, isInsured: true),
+                        Self(age: base.age, isInsured: false),
+                    ]
+                }
             }
 
-            extension Patient: EdgeCaseGeneratable {
+            extension Patient: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -995,9 +1209,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(origin: (0, 0))
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(origin: (0, 0)),
+                        Self(origin: (-1, 1)),
+                    ]
+                }
             }
 
-            extension Canvas: EdgeCaseGeneratable {
+            extension Canvas: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1026,9 +1247,15 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(destination: Address.headquarters)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(destination: Address.headquarters),
+                    ]
+                }
             }
 
-            extension Delivery: EdgeCaseGeneratable {
+            extension Delivery: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1062,9 +1289,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(title: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(title: true, theme: base.theme),
+                        Self(title: false, theme: base.theme),
+                    ]
+                }
             }
 
-            extension Screen: EdgeCaseGeneratable {
+            extension Screen: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1098,9 +1332,18 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(pages: 0, watermark: "")
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(pages: Int.min, watermark: base.watermark),
+                        Self(pages: Int.max, watermark: base.watermark),
+                        Self(pages: 0, watermark: base.watermark),
+                        Self(pages: -1, watermark: base.watermark),
+                    ]
+                }
             }
 
-            extension Report: EdgeCaseGeneratable {
+            extension Report: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1132,9 +1375,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(flag: false, inner: Address.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(flag: true, inner: base.inner),
+                        Self(flag: false, inner: base.inner),
+                    ]
+                }
             }
 
-            extension Wrapper: EdgeCaseGeneratable {
+            extension Wrapper: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1169,9 +1419,20 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(attempts: 0, remember: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(attempts: Int.min, remember: base.remember),
+                        Self(attempts: Int.max, remember: base.remember),
+                        Self(attempts: 0, remember: base.remember),
+                        Self(attempts: -1, remember: base.remember),
+                        Self(attempts: base.attempts, remember: true),
+                        Self(attempts: base.attempts, remember: false),
+                    ]
+                }
             }
 
-            extension Login: EdgeCaseGeneratable {
+            extension Login: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1206,9 +1467,21 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(level: 0, address: Address.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(level: Int.min, address: base.address),
+                        Self(level: Int.max, address: base.address),
+                        Self(level: 0, address: base.address),
+                        Self(level: -1, address: base.address),
+                    ]
+                    + Address.edgeCases.map {
+                        Self(level: base.level, address: $0)
+                    }
+                }
             }
 
-            extension Profile: EdgeCaseGeneratable {
+            extension Profile: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1242,9 +1515,18 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(destination: nil)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(destination: nil),
+                    ]
+                    + Address.edgeCases.map {
+                        Self(destination: $0)
+                    }
+                }
             }
 
-            extension Delivery: EdgeCaseGeneratable {
+            extension Delivery: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1319,9 +1601,20 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(count: 0, isOn: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(count: Int8.min, isOn: base.isOn),
+                        Self(count: Int8.max, isOn: base.isOn),
+                        Self(count: 0, isOn: base.isOn),
+                        Self(count: -1, isOn: base.isOn),
+                        Self(count: base.count, isOn: true),
+                        Self(count: base.count, isOn: false),
+                    ]
+                }
             }
 
-            extension Toggle: EdgeCaseGeneratable {
+            extension Toggle: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1362,9 +1655,19 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(priority: false, destination: Address.edgeCaseBaseline)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(priority: true, destination: base.destination),
+                        Self(priority: false, destination: base.destination),
+                    ]
+                    + Address.edgeCases.map {
+                        Self(priority: base.priority, destination: $0)
+                    }
+                }
             }
 
-            extension Shipment: EdgeCaseGeneratable {
+            extension Shipment: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1413,9 +1716,47 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(x: 1, y: 1, z: 1)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(x: 1, y: base.y, z: base.z),
+                        Self(x: 2, y: base.y, z: base.z),
+                        Self(x: 3, y: base.y, z: base.z),
+                        Self(x: 4, y: base.y, z: base.z),
+                        Self(x: 5, y: base.y, z: base.z),
+                        Self(x: 6, y: base.y, z: base.z),
+                        Self(x: 7, y: base.y, z: base.z),
+                        Self(x: 8, y: base.y, z: base.z),
+                        Self(x: 9, y: base.y, z: base.z),
+                        Self(x: 10, y: base.y, z: base.z),
+                        Self(x: 11, y: base.y, z: base.z),
+                        Self(x: base.x, y: 1, z: base.z),
+                        Self(x: base.x, y: 2, z: base.z),
+                        Self(x: base.x, y: 3, z: base.z),
+                        Self(x: base.x, y: 4, z: base.z),
+                        Self(x: base.x, y: 5, z: base.z),
+                        Self(x: base.x, y: 6, z: base.z),
+                        Self(x: base.x, y: 7, z: base.z),
+                        Self(x: base.x, y: 8, z: base.z),
+                        Self(x: base.x, y: 9, z: base.z),
+                        Self(x: base.x, y: 10, z: base.z),
+                        Self(x: base.x, y: 11, z: base.z),
+                        Self(x: base.x, y: base.y, z: 1),
+                        Self(x: base.x, y: base.y, z: 2),
+                        Self(x: base.x, y: base.y, z: 3),
+                        Self(x: base.x, y: base.y, z: 4),
+                        Self(x: base.x, y: base.y, z: 5),
+                        Self(x: base.x, y: base.y, z: 6),
+                        Self(x: base.x, y: base.y, z: 7),
+                        Self(x: base.x, y: base.y, z: 8),
+                        Self(x: base.x, y: base.y, z: 9),
+                        Self(x: base.x, y: base.y, z: 10),
+                        Self(x: base.x, y: base.y, z: 11),
+                    ]
+                }
             }
 
-            extension Grid: EdgeCaseGeneratable {
+            extension Grid: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             diagnostics: [
@@ -1495,9 +1836,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(isOn: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
             }
 
-            extension Flag: EdgeCaseGeneratable {
+            extension Flag: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             macroSpecs: testMacros
@@ -1630,9 +1978,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(isOn: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(isOn: true),
+                        Self(isOn: false),
+                    ]
+                }
             }
 
-            extension Config: EdgeCaseGeneratable {
+            extension Config: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             diagnostics: [
@@ -1671,9 +2026,16 @@ final class EdgeCaseTests: XCTestCase {
                 static var edgeCaseBaseline: Self {
                     Self(isOn: false)
                 }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(isOn: true, origin: base.origin),
+                        Self(isOn: false, origin: base.origin),
+                    ]
+                }
             }
 
-            extension Layout: EdgeCaseGeneratable {
+            extension Layout: EdgeCaseGeneratable, EdgeCaseComposable {
             }
             """,
             diagnostics: [
@@ -1684,6 +2046,149 @@ final class EdgeCaseTests: XCTestCase {
                     severity: .warning
                 )
             ],
+            macroSpecs: testMacros
+        )
+    }
+
+    // MARK: - Fixture composition (v0.4)
+
+    /// The composition contract in one place: custom overrides vary within
+    /// their domain, excluded properties pass the base value through instead
+    /// of reapplying their default, and nested types splice their runtime
+    /// cases around the base — every non-varied position reads from `base`.
+    func testVaryingMemberComposesOverridesExclusionsAndNestedTypes() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Booking {
+                @EdgeCase(.custom([0, 150]))
+                let age: Int
+                @EdgeCase(.exclude)
+                var channel: String = "web"
+                let owner: Owner
+            }
+            """,
+            expandedSource: """
+            struct Booking {
+                let age: Int
+                var channel: String = "web"
+                let owner: Owner
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(age: 0, owner: Owner.edgeCaseBaseline),
+                        Self(age: 150, owner: Owner.edgeCaseBaseline),
+                    ]
+                    + Owner.edgeCases.map {
+                        Self(age: 0, owner: $0)
+                    }
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(age: 0, owner: Owner.edgeCaseBaseline)
+                }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(age: 0, channel: base.channel, owner: base.owner),
+                        Self(age: 150, channel: base.channel, owner: base.owner),
+                    ]
+                    + Owner.edgeCases.map {
+                        Self(age: base.age, channel: base.channel, owner: $0)
+                    }
+                }
+            }
+
+            extension Booking: EdgeCaseGeneratable, EdgeCaseComposable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    /// In modules with main-actor default isolation an unannotated
+    /// conformance is inferred main-actor-isolated even on a nonisolated
+    /// type, which would make `edgeCases` unusable from nonisolated test
+    /// code — so a `nonisolated` modifier on the type is mirrored onto the
+    /// generated conformances.
+    func testNonisolatedTypeGetsNonisolatedConformances() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            nonisolated struct Beacon {
+                let strength: Int
+            }
+            """,
+            expandedSource: """
+            nonisolated struct Beacon {
+                let strength: Int
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(strength: Int.min),
+                        Self(strength: Int.max),
+                        Self(strength: 0),
+                        Self(strength: -1),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self(strength: 0)
+                }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(strength: Int.min),
+                        Self(strength: Int.max),
+                        Self(strength: 0),
+                        Self(strength: -1),
+                    ]
+                }
+            }
+
+            extension Beacon: nonisolated EdgeCaseGeneratable, nonisolated EdgeCaseComposable {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+    }
+
+    /// A struct with nothing to vary still composes: the single instance is
+    /// the base reconstruction, not an empty array (mirroring the
+    /// baseline-only instance `edgeCases` generates).
+    func testVaryingMemberWithNothingToVaryReturnsTheBase() {
+        assertMacroExpansion(
+            """
+            @EdgeCases
+            struct Pinned {
+                @EdgeCase(.exclude)
+                var retries: Int = 3
+            }
+            """,
+            expandedSource: """
+            struct Pinned {
+                var retries: Int = 3
+
+                static var edgeCases: [Self] {
+                    [
+                        Self(),
+                    ]
+                }
+
+                static var edgeCaseBaseline: Self {
+                    Self()
+                }
+
+                static func edgeCases(varying base: Self) -> [Self] {
+                    [
+                        Self(retries: base.retries),
+                    ]
+                }
+            }
+
+            extension Pinned: EdgeCaseGeneratable, EdgeCaseComposable {
+            }
+            """,
             macroSpecs: testMacros
         )
     }

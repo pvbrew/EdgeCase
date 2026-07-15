@@ -15,6 +15,11 @@ struct EdgeCasesAnalysis {
 
     let strategy: GenerationStrategy
     let constructors: [InstanceConstructor]
+    /// Constructor for the `edgeCases(varying:)` member, holding non-varied
+    /// slots at `base.<property>` instead of a synthetic baseline. `nil` for
+    /// enums, which do not get the member (a base instance is a single case;
+    /// its adversaries are simply the other cases in `edgeCases`).
+    let varyingConstructor: InstanceConstructor?
     let failures: [Failure]
     let accessModifier: String
 
@@ -35,16 +40,19 @@ struct EdgeCasesAnalysis {
         var failures: [Failure] = []
         strategy = Self.strategy(of: node, failures: &failures)
 
-        let analyzed: (constructors: [InstanceConstructor], failures: [Failure])
         if let structDecl = declaration.as(StructDeclSyntax.self) {
-            analyzed = Self.analyzeStruct(structDecl)
+            let analyzed = Self.analyzeStruct(structDecl)
+            constructors = analyzed.constructors
+            varyingConstructor = analyzed.varyingConstructor
+            self.failures = failures + analyzed.failures
         } else if let enumDecl = declaration.as(EnumDeclSyntax.self) {
-            analyzed = Self.analyzeEnum(enumDecl)
+            let analyzed = Self.analyzeEnum(enumDecl)
+            constructors = analyzed.constructors
+            varyingConstructor = nil
+            self.failures = failures + analyzed.failures
         } else {
             return nil
         }
-        constructors = analyzed.constructors
-        self.failures = failures + analyzed.failures
         accessModifier = Self.accessModifier(of: declaration)
     }
 
@@ -162,9 +170,25 @@ struct EdgeCasesAnalysis {
 
     private static func analyzeStruct(
         _ structDecl: StructDeclSyntax
-    ) -> (constructors: [InstanceConstructor], failures: [Failure]) {
+    ) -> (
+        constructors: [InstanceConstructor],
+        varyingConstructor: InstanceConstructor,
+        failures: [Failure]
+    ) {
         var slots: [ValueSlot] = []
+        // Slot list for `edgeCases(varying:)`, built in declaration order so
+        // the emitted calls remain valid memberwise-initializer calls. It
+        // differs from `slots` in two ways: non-varied positions hold
+        // `base.<property>`, and properties the plain generation omits from
+        // calls (excluded or unsupported, with a default value to fall back
+        // on) are passed through from `base` instead so a fixture's
+        // realistic values survive composition.
+        var varyingSlots: [ValueSlot] = []
         var failures: [Failure] = []
+
+        func heldAtBase(_ name: String) -> String {
+            "base.\(name)"
+        }
 
         for member in structDecl.memberBlock.members {
             guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
@@ -223,8 +247,18 @@ struct EdgeCasesAnalysis {
                 switch override?.kind {
                 case .exclude:
                     // With a default value the memberwise initializer fills the
-                    // property in; the generated calls simply omit it.
-                    if binding.initializer != nil { continue }
+                    // property in; the generated calls simply omit it. The
+                    // varying calls pass `base.<name>` through instead.
+                    if binding.initializer != nil {
+                        varyingSlots.append(
+                            ValueSlot(
+                                label: name,
+                                writtenType: writtenType,
+                                generator: TypeGenerator(edgeCases: [], baseline: heldAtBase(name))
+                            )
+                        )
+                        continue
+                    }
                     guard let annotation else {
                         failures.append(
                             Failure(node: Syntax(binding), message: .missingTypeAnnotation(property: name))
@@ -247,6 +281,13 @@ struct EdgeCasesAnalysis {
                             generator: TypeGenerator(edgeCases: [], baseline: generator.baseline)
                         )
                     )
+                    varyingSlots.append(
+                        ValueSlot(
+                            label: name,
+                            writtenType: writtenType,
+                            generator: TypeGenerator(edgeCases: [], baseline: heldAtBase(name))
+                        )
+                    )
 
                 case .custom(let values):
                     slots.append(
@@ -254,6 +295,13 @@ struct EdgeCasesAnalysis {
                             label: name,
                             writtenType: writtenType,
                             generator: TypeGenerator(edgeCases: values, baseline: values[0])
+                        )
+                    )
+                    varyingSlots.append(
+                        ValueSlot(
+                            label: name,
+                            writtenType: writtenType,
+                            generator: TypeGenerator(edgeCases: values, baseline: heldAtBase(name))
                         )
                     )
 
@@ -275,6 +323,13 @@ struct EdgeCasesAnalysis {
                                     )
                                 )
                             )
+                            varyingSlots.append(
+                                ValueSlot(
+                                    label: name,
+                                    writtenType: writtenType,
+                                    generator: TypeGenerator(edgeCases: [], baseline: heldAtBase(name))
+                                )
+                            )
                         } else {
                             failures.append(
                                 Failure(
@@ -288,15 +343,32 @@ struct EdgeCasesAnalysis {
                         }
                         continue
                     }
+                    let uniqued = deduplicated(generator)
                     slots.append(
-                        ValueSlot(label: name, writtenType: writtenType, generator: deduplicated(generator))
+                        ValueSlot(label: name, writtenType: writtenType, generator: uniqued)
+                    )
+                    varyingSlots.append(
+                        ValueSlot(
+                            label: name,
+                            writtenType: writtenType,
+                            generator: TypeGenerator(
+                                edgeCases: uniqued.edgeCases,
+                                baseline: heldAtBase(name),
+                                dynamicSource: uniqued.dynamicSource
+                            )
+                        )
                     )
                 }
             }
         }
 
         let constructor = InstanceConstructor(callee: "Self", slots: slots, requiresParentheses: true)
-        return ([constructor], failures)
+        let varyingConstructor = InstanceConstructor(
+            callee: "Self",
+            slots: varyingSlots,
+            requiresParentheses: true
+        )
+        return ([constructor], varyingConstructor, failures)
     }
 
     /// Resolves the written type of a binding, following Swift's rule that in

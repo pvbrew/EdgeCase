@@ -241,6 +241,115 @@ final class EdgeCaseOverrideRuntimeTests: XCTestCase {
     }
 }
 
+// MARK: - v0.4: fixture composition
+
+final class EdgeCaseComposableRuntimeTests: XCTestCase {
+
+    /// The composition contract: every instance keeps the base's values in
+    /// all but the one property currently taking an edge case.
+    func testVaryingKeepsBaseValuesWhileOnePropertyTakesEdgeCases() {
+        let base = Owner(name: "Ada", rating: 4.5)
+        let composed = Owner.edgeCases(varying: base)
+
+        XCTAssertTrue(composed.contains { $0.name.count == 10_000 && $0.rating == 4.5 })
+        XCTAssertTrue(composed.contains { $0.rating.isNaN && $0.name == "Ada" })
+        XCTAssertTrue(
+            composed.allSatisfy { $0.name == "Ada" || $0.rating == 4.5 },
+            "no instance may vary two properties at once"
+        )
+    }
+
+    /// Excluded properties keep the fixture's realistic values — including
+    /// the excluded-with-default case, where plain generation would have
+    /// reapplied the default.
+    func testVaryingPassesExcludedAndOverriddenPropertiesThroughFromBase() {
+        let base = Booking(
+            age: 42,
+            channel: "ios",
+            fingerprint: "device-7",
+            id: UUID(uuidString: "12345678-1234-4234-8234-123456789012")!,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            site: URL(string: "https://example.org/checkout")!
+        )
+        let composed = Booking.edgeCases(varying: base)
+
+        XCTAssertTrue(composed.allSatisfy { $0.channel == "ios" }, "default 'web' must not be reapplied")
+        XCTAssertTrue(composed.allSatisfy { $0.fingerprint == "device-7" })
+        XCTAssertEqual(
+            Set(composed.map(\.age)), [0, 1, 149, 150, 42],
+            "age varies only within its custom domain, or holds the base value"
+        )
+        XCTAssertTrue(composed.contains { $0.createdAt == .distantFuture && $0.site == base.site })
+    }
+
+    /// Nested `EdgeCaseGeneratable` types splice their runtime cases in
+    /// while the rest of the instance stays the base.
+    func testVaryingSplicesNestedTypeCasesAroundTheBase() {
+        let base = Account(
+            id: 7,
+            nickname: "nick",
+            tags: ["a"],
+            scores: [1],
+            settings: ["dark": true],
+            owner: Owner(name: "Ada", rating: 4.5),
+            plan: .paid(renewals: 3)
+        )
+        let composed = Account.edgeCases(varying: base)
+
+        XCTAssertTrue(composed.contains { $0.owner.rating.isNaN && $0.id == 7 && $0.plan == .paid(renewals: 3) })
+        XCTAssertTrue(composed.contains { $0.plan == .paid(renewals: .max) && $0.owner == base.owner })
+        XCTAssertTrue(composed.contains { $0.nickname == nil && $0.tags == ["a"] })
+    }
+
+    /// Composition is one-property-at-a-time whatever the declared strategy:
+    /// the count is the sum of the columns, never their max or product.
+    func testVaryingIsOneAtATimeEvenUnderOtherStrategies() {
+        let minimal = MinimalForm(attempts: 9, comment: "fine", agreed: true)
+        XCTAssertEqual(MinimalForm.edgeCases(varying: minimal).count, 4 + 8 + 2)
+
+        let combo = ComboPair(attempts: 9, agreed: true)
+        XCTAssertEqual(ComboPair.edgeCases(varying: combo).count, 4 + 2)
+    }
+
+    /// The conformance is usable generically — the composition entry point
+    /// for helpers that accept any composable type.
+    func testComposableConformanceSupportsGenericCode() {
+        func adversaries<T: EdgeCaseComposable>(around base: T) -> Int {
+            T.edgeCases(varying: base).count
+        }
+        // The sum of the property columns: String's 8 cases + Double's 5.
+        // (Plain `edgeCases` counts 12: its all-baseline instance is
+        // generated once per property and deduplicated; composed instances
+        // read distinct values from `base`, so nothing collides.)
+        XCTAssertEqual(adversaries(around: Owner(name: "Ada", rating: 4.5)), 8 + 5)
+    }
+}
+
+// MARK: - v0.4: descriptions
+
+final class EdgeCaseDescriptionTests: XCTestCase {
+
+    func testLongDescriptionsAreElided() {
+        let description = edgeCaseDescription(of: String(repeating: "a", count: 10_000))
+        XCTAssertEqual(description.count, 80)
+        XCTAssertTrue(description.hasSuffix("…"))
+    }
+
+    func testShortDescriptionsAreUntouched() {
+        XCTAssertEqual(edgeCaseDescription(of: 42), "42")
+        XCTAssertEqual(edgeCaseDescription(of: Owner(name: "Ada", rating: 0)), #"Owner(name: "Ada", rating: 0.0)"#)
+    }
+
+    func testNewlinesCollapseToSpaces() {
+        XCTAssertEqual(edgeCaseDescription(of: "a\nb\r\nc"), "a b c")
+    }
+
+    func testCustomMaximumLength() {
+        XCTAssertEqual(edgeCaseDescription(of: "abcdef", maxLength: 4), "abc…")
+        XCTAssertEqual(edgeCaseDescription(of: "abcd", maxLength: 4), "abcd")
+    }
+}
+
 final class EdgeCaseStrategyRuntimeTests: XCTestCase {
 
     func testMinimalCountIsTheLargestColumn() {
