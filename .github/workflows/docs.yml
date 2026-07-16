@@ -1,0 +1,61 @@
+name: Docs
+
+# Publishes the DocC documentation for all three modules to GitHub Pages on
+# every release tag (and on demand). Requires Pages to be enabled for the
+# repository with "GitHub Actions" as the source.
+on:
+  push:
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build combined documentation
+        run: |
+          swift package --allow-writing-to-directory docs \
+            generate-documentation \
+            --target EdgeCase --target EdgeCaseTesting --target EdgeCaseXCTest \
+            --enable-experimental-combined-documentation \
+            --include-extended-types \
+            --transform-for-static-hosting \
+            --hosting-base-path EdgeCase \
+            --output-path docs
+      - name: Redirect the site root to the EdgeCase module page
+        run: |
+          cat > docs/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta http-equiv="refresh" content="0; url=documentation/edgecase/">
+              <link rel="canonical" href="https://pvbrew.github.io/EdgeCase/documentation/edgecase/">
+            </head>
+            <body>Redirecting to the <a href="documentation/edgecase/">EdgeCase documentation</a>.</body>
+          </html>
+          EOF
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

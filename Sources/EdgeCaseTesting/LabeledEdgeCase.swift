@@ -43,10 +43,25 @@ public struct LabeledEdgeCase<Value>: CustomTestStringConvertible {
 extension LabeledEdgeCase: Sendable where Value: Sendable {}
 
 extension EdgeCaseGeneratable {
-    /// The same instances as ``EdgeCase/EdgeCaseGeneratable/edgeCases``, each
-    /// wrapped with a readable label for `@Test(arguments:)`.
+    /// The same instances as `edgeCases`, each wrapped with a readable label
+    /// for `@Test(arguments:)`.
     public static var labeledEdgeCases: [LabeledEdgeCase<Self>] {
         edgeCases.enumerated().map { LabeledEdgeCase(index: $0.offset, value: $0.element) }
+    }
+}
+
+extension EdgeCaseComposable {
+    /// The same instances as `edgeCases(varying:)`, each wrapped with a
+    /// readable label — fixture composition and short labels together:
+    ///
+    /// ```swift
+    /// @Test(arguments: User.labeledEdgeCases(varying: .fixture()))
+    /// func rendering(_ edgeCase: LabeledEdgeCase<User>) throws {
+    ///     try render(edgeCase.value)   // realistic user, one adversarial
+    /// }                                // field, readable navigator label
+    /// ```
+    public static func labeledEdgeCases(varying base: Self) -> [LabeledEdgeCase<Self>] {
+        edgeCases(varying: base).enumerated().map { LabeledEdgeCase(index: $0.offset, value: $0.element) }
     }
 }
 #endif

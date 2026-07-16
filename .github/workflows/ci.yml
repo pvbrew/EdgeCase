@@ -77,3 +77,23 @@ jobs:
           xcodebuild docbuild \
             -scheme EdgeCase \
             -destination 'generic/platform=macOS'
+
+  api-breakage:
+    name: API breakage
+    if: github.event_name == 'pull_request'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Diagnose API-breaking changes against the latest release
+        run: |
+          BASELINE=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+          case "$BASELINE" in
+            ""|0.*)
+              echo "No 1.x release tag yet — skipping (the semver commitment starts at 1.0.0)."
+              exit 0
+              ;;
+          esac
+          echo "Comparing against $BASELINE"
+          swift package diagnose-api-breaking-changes "$BASELINE"

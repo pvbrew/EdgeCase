@@ -1,10 +1,12 @@
 # EdgeCase
 
 [![CI](https://github.com/pvbrew/EdgeCase/actions/workflows/ci.yml/badge.svg)](https://github.com/pvbrew/EdgeCase/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-DocC-blue)](https://pvbrew.github.io/EdgeCase/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 You test the happy path. `@EdgeCases` generates the ones you forgot — the empty string, the `Int.max`, the `NaN` — in one line.
 
-EdgeCase is a Swift macro that inspects the stored properties of a struct and generates a `static var edgeCases: [Self]` full of boundary and adversarial values, ready to feed into your tests.
+EdgeCase is a Swift macro that inspects the stored properties of a struct (or the cases of an enum) and generates a `static var edgeCases: [Self]` full of boundary and adversarial values, ready to feed into your tests.
 
 ## Before
 
@@ -62,7 +64,7 @@ static var edgeCases: [Self] {
 }
 ```
 
-…plus a `static var edgeCaseBaseline: Self`, an `EdgeCaseGeneratable` conformance so annotated types can nest inside each other, and — for structs — a `static func edgeCases(varying:)` that composes edge cases around a realistic fixture (see [Composing with fixtures](#composing-with-fixtures-v04)).
+…plus a `static var edgeCaseBaseline: Self`, an `EdgeCaseGeneratable` conformance so annotated types can nest inside each other, and — for structs — a `static func edgeCases(varying:)` that composes edge cases around a realistic fixture (see [Composing with fixtures](#composing-with-fixtures)).
 
 ## Built-in generators
 
@@ -83,7 +85,7 @@ static var edgeCases: [Self] {
 
 `Date`, `URL`, and `UUID` participate through `EdgeCaseGeneratable` conformances that ship with the library — if you wrote your own in v0.2, delete them when upgrading.
 
-## Per-property overrides (v0.3)
+## Per-property overrides
 
 Real domain models have real domains. `@EdgeCase` overrides one property without giving up generation for the rest:
 
@@ -105,7 +107,7 @@ struct Patient {
 
 Overrides apply to stored instance properties of structs; the macro warns when one can have no effect (computed, `static`, `lazy`, or `let` with a fixed value).
 
-## Generation strategies (v0.3)
+## Generation strategies
 
 `@EdgeCases(strategy:)` picks how property edge cases combine into instances:
 
@@ -121,7 +123,7 @@ Overrides apply to stored instance properties of structs; the macro warns when o
 | `.minimal` | max(4, 8, 2) = 8 | Instance *i* takes the *i*-th edge case of *every* property (shorter lists cycle). The smallest set that still uses every edge value — a cheap smoke-test suite. |
 | `.combinatorial` | 4 × 8 × 2 = 64 | The full cartesian product, for cross-field validation bugs that only appear when two adversarial values meet. Capped at 1,000 instances, with a compile-time warning when the cap is exceeded. |
 
-## Drop into your test suite (v0.4)
+## Drop into your test suite
 
 Two companion products plug the generated cases into either test framework. Both link a testing framework, so add them to test targets only:
 
@@ -151,7 +153,7 @@ func profileRendering(_ edgeCase: LabeledEdgeCase<User>) throws {
 
 ### XCTest
 
-`EdgeCaseXCTest` adds the sugar from the roadmap — and unlike the standard `XCTAssertNoThrow`, it keeps iterating past failures, reporting every offending instance with its position and an abbreviated description:
+`EdgeCaseXCTest` adds a `forEachEdgeCase:` overload of `XCTAssertNoThrow` — and unlike the standard one, it keeps iterating past failures, reporting every offending instance with its position and an abbreviated description:
 
 ```swift
 import EdgeCaseXCTest
@@ -165,7 +167,7 @@ func testProfileRendering() {
 
 An overload takes explicit case lists: `XCTAssertNoThrow(forEach: cases) { ... }`.
 
-## Composing with fixtures (v0.4)
+## Composing with fixtures
 
 Generated edge cases are all-neutral except the varied property. If you build realistic instances with a fixtures-style library (or a hand-rolled `.fixture()` factory), the generated `EdgeCaseComposable` conformance composes the two — `edgeCases(varying:)` keeps the base's values while one property at a time takes its edge cases:
 
@@ -179,6 +181,15 @@ func profileRendering(user: User) throws {
 ```
 
 Excluded properties keep the fixture's values instead of reapplying their defaults, and composition is always one-property-at-a-time regardless of the declared strategy — holding everything else at the fixture is the point. Structs get the conformance; enums don't (a base enum value is a single case, and its adversaries are simply the other cases).
+
+Composition and labels combine — `labeledEdgeCases(varying:)` from `EdgeCaseTesting` gives composed cases the same short navigator labels:
+
+```swift
+@Test(arguments: User.labeledEdgeCases(varying: .fixture()))
+func profileRendering(_ edgeCase: LabeledEdgeCase<User>) throws {
+    try render(edgeCase.value)
+}
+```
 
 ## Nested types and enums
 
@@ -225,7 +236,7 @@ Under the default `.oneAtATime` strategy, one property varies at a time while th
 
 The macro fails loudly instead of generating something surprising: unsupported property types without a default value are compile-time errors, and it warns — pointing at the fix — when a property type has no generator but a default value to fall back on, when an override can have no effect, and when `.combinatorial` blows past the 1,000-instance cap.
 
-### Requirements & limitations (v0.4)
+### Requirements & limitations
 
 - Swift 6.0+, iOS 17+ / macOS 10.15+
 - Structs and enums; every varied stored property or associated value must be a supported type, a type conforming to `EdgeCaseGeneratable`, or a collection/optional of those — or carry an `@EdgeCase(.custom([...]))` override
@@ -242,11 +253,11 @@ Swift Package Manager only. In `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "0.4.0")
+    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "1.0.0")
 ]
 ```
 
-and add the products to your test target — `EdgeCase` for the macro, plus the [integration companion](#drop-into-your-test-suite-v04) for your test framework:
+and add the products to your test target — `EdgeCase` for the macro, plus the [integration companion](#drop-into-your-test-suite) for your test framework:
 
 ```swift
 .testTarget(
@@ -267,13 +278,19 @@ An example iOS app is available in [`Examples/EdgeCaseExample`](Examples/EdgeCas
 
 ## Documentation
 
-The DocC catalog ships with the package — open the EdgeCase scheme in Xcode and run **Product ▸ Build Documentation**, or start with the [Getting Started](Sources/EdgeCase/EdgeCase.docc/GettingStarted.md) and [Testing Integration](Sources/EdgeCase/EdgeCase.docc/TestingIntegration.md) articles.
+Hosted documentation for all three modules lives at **[pvbrew.github.io/EdgeCase](https://pvbrew.github.io/EdgeCase/)** — start with [Getting Started](https://pvbrew.github.io/EdgeCase/documentation/edgecase/gettingstarted) and [Testing Integration](https://pvbrew.github.io/EdgeCase/documentation/edgecase/testingintegration). The DocC catalogs also ship with the package: open the EdgeCase scheme in Xcode and run **Product ▸ Build Documentation**, or read the articles as markdown in [`Sources/EdgeCase/EdgeCase.docc`](Sources/EdgeCase/EdgeCase.docc).
+
+## Versioning
+
+EdgeCase follows [Semantic Versioning](https://semver.org) from 1.0.0 onward: the macro signatures, the `EdgeCaseGeneratable`/`EdgeCaseComposable` protocols, and the companion APIs only break in major versions, and CI diffs the public API against the latest release on every pull request. The concrete generated *values* are a quality surface, not an API — minor releases may add or refine edge cases (changing case counts), so write tests against behaviors (`contains { $0.karma.isNaN }`), not exact indices or counts. The full policy: [API_STABILITY.md](API_STABILITY.md). Release history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 
-- **v1.0** — API freeze, full documentation, hosted docs
+**v1.0 (current)** — stable API, full DocC coverage, hosted docs, semver commitment.
 
-Shipped: **v0.1** core macro & primitives · **v0.2** optionals, collections, unicode, nesting, enums · **v0.3** overrides, strategies, Foundation conformances · **v0.4** swift-testing & XCTest integration, fixture composition, CI, DocC
+Shipped along the way: **v0.1** core macro & primitives · **v0.2** optionals, collections, unicode, nesting, enums · **v0.3** overrides, strategies, Foundation conformances · **v0.4** swift-testing & XCTest integration, fixture composition, CI, DocC
+
+Under consideration (unscheduled): `Codable` round-trip edge cases (malformed JSON inputs), property-based-testing integration, and more built-in Foundation generators. Have a case for one? [Open an issue](https://github.com/pvbrew/EdgeCase/issues).
 
 ## License
 

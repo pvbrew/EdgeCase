@@ -9,7 +9,7 @@ Add the package to your test target — EdgeCase is SPM-only:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "0.4.0")
+    .package(url: "https://github.com/pvbrew/EdgeCase.git", from: "1.0.0")
 ],
 targets: [
     .testTarget(

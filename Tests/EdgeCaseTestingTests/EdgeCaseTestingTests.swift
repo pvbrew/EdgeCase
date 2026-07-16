@@ -51,3 +51,35 @@ struct LabeledEdgeCaseTests {
                 "every composed case keeps the base value in all but one property")
     }
 }
+
+@Suite("labeledEdgeCases(varying:)")
+struct LabeledComposedEdgeCaseTests {
+    static let base = Ping(id: 7, note: "realistic")
+
+    @Test func wrapsComposedCasesWithoutReorderingOrDropping() {
+        let labeled = Ping.labeledEdgeCases(varying: Self.base)
+        #expect(labeled.map(\.value) == Ping.edgeCases(varying: Self.base))
+
+        for (index, edgeCase) in labeled.enumerated() {
+            #expect(edgeCase.index == index)
+            #expect(edgeCase.testDescription.hasPrefix("[\(index)] "))
+        }
+    }
+
+    @Test func labelsStayShortForHugeComposedInstances() throws {
+        let huge = Ping.labeledEdgeCases(varying: Self.base)
+            .first { $0.value.note.count == 10_000 }
+        let label = try #require(huge, "composition must still vary note through its edge cases")
+            .testDescription
+        #expect(label.count < 100, "a 10,000-character note must not flood test output")
+        #expect(label.hasSuffix("…"))
+    }
+
+    // Labeled composition drives `@Test(arguments:)` end-to-end: every
+    // argument keeps the base's values in all but one property.
+    @Test(arguments: Ping.labeledEdgeCases(varying: base))
+    func drivesParameterizedTests(_ edgeCase: LabeledEdgeCase<Ping>) {
+        #expect(edgeCase.value.id == Self.base.id || edgeCase.value.note == Self.base.note)
+        #expect(!edgeCase.testDescription.isEmpty)
+    }
+}

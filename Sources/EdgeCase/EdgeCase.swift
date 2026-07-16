@@ -1,6 +1,3 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
-
 /// A type that can supply boundary and adversarial instances of itself.
 ///
 /// `@EdgeCases` generates this conformance for you, and recurses into stored
@@ -171,7 +168,7 @@ public macro EdgeCase(_ override: EdgeCaseOverride) =
 /// (``EdgeCaseStrategy/combinatorial``). Exact duplicates are removed. For
 /// enums, every case is generated.
 ///
-/// Supported property types (v0.4):
+/// Supported property types:
 /// - `Int`, `Int8`, `Int16`, `Int32`, `Int64` — `.min`, `.max`, `0`, `-1`
 /// - `Double`, `Float` — `±.greatestFiniteMagnitude`, `0`, `.nan`, `.infinity`
 /// - `String` — empty, single char, 10,000 chars, whitespace-only, emoji,
