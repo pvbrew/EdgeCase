@@ -31,7 +31,10 @@ conformance whose `edgeCases(varying:)` composes adversarial values around a
 realistic fixture.
 
 Start with <doc:GettingStarted>, then wire the generated cases into XCTest
-or swift-testing with <doc:TestingIntegration>.
+or swift-testing with <doc:TestingIntegration>. Two companion modules keep
+test-framework code out of app targets: `EdgeCaseTesting` labels instances
+for `@Test(arguments:)`, and `EdgeCaseXCTest` adds the
+`XCTAssertNoThrow(forEachEdgeCase:)` sugar.
 
 ## Topics
 

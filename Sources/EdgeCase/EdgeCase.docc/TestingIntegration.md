@@ -91,6 +91,17 @@ declared strategy — holding everything else at the fixture is the point.
 because a base enum value is a single case and its adversaries are simply
 the other cases in `edgeCases`.
 
+Composition and labels combine: `labeledEdgeCases(varying:)` from
+`EdgeCaseTesting` wraps each composed instance the same way
+`labeledEdgeCases` wraps the plain list:
+
+```swift
+@Test(arguments: User.labeledEdgeCases(varying: .fixture()))
+func profileRendering(_ edgeCase: LabeledEdgeCase<User>) throws {
+    try render(edgeCase.value)
+}
+```
+
 ### Readable failure output
 
 All the helpers abbreviate instance descriptions with

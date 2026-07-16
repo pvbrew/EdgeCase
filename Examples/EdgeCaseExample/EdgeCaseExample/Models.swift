@@ -1,8 +1,8 @@
 import EdgeCase
 import Foundation
 
-/// The kind of model you'd ship in a real app — now with the v0.3 shapes
-/// that make the macro usable on real domain models:
+/// The kind of model you'd ship in a real app, with the shapes that make
+/// the macro usable on real domain models:
 ///
 /// - `@EdgeCase(.custom([...]))` keeps `age` inside its real domain (and
 ///   lands exactly on the age-gate boundary) instead of `Int.min`/`Int.max`.
@@ -121,7 +121,7 @@ nonisolated extension Address {
 }
 
 /// The share-sheet payload — a throwing surface for
-/// `XCTAssertNoThrow(forEachEdgeCase:)` to guard (v0.4).
+/// `XCTAssertNoThrow(forEachEdgeCase:)` to guard.
 nonisolated struct ProfileCard: Codable {
     let name: String
     let karma: String

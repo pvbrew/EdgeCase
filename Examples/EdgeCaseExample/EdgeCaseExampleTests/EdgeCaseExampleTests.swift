@@ -5,7 +5,7 @@ import XCTest
 
 final class EdgeCaseExampleTests: XCTestCase {
 
-    // MARK: v0.4: the XCTest sugar
+    // MARK: The XCTest sugar
 
     /// One line instead of the loop: runs the body once per generated
     /// instance and reports every failing case with an abbreviated
@@ -79,45 +79,45 @@ final class EdgeCaseExampleTests: XCTestCase {
     }
 
     func testEdgeCasesCoverTheValuesYouForget() {
-        // v0.1 primitives.
+        // Primitives.
         XCTAssertTrue(User.edgeCases.contains { $0.id == Int.max })
         XCTAssertTrue(User.edgeCases.contains { $0.username.count == 10_000 })
         XCTAssertTrue(User.edgeCases.contains { $0.karma.isNaN })
 
-        // v0.2: optionals are nil and every wrapped edge case.
+        // Optionals are nil and every wrapped edge case.
         XCTAssertTrue(User.edgeCases.contains { $0.bio == nil })
         XCTAssertTrue(User.edgeCases.contains { $0.bio?.count == 10_000 })
 
-        // v0.2: unicode adversaries — combining diacritics and zero-width characters.
+        // Unicode adversaries — combining diacritics and zero-width characters.
         XCTAssertTrue(User.edgeCases.contains { $0.username.contains("Cafe\u{0301}") })
         XCTAssertTrue(User.edgeCases.contains { $0.username.unicodeScalars.contains("\u{200B}") })
 
-        // v0.2: arrays are empty, single, large, and all-edge-case elements.
+        // Arrays are empty, single, large, and all-edge-case elements.
         XCTAssertTrue(User.edgeCases.contains { $0.tags.isEmpty })
         XCTAssertTrue(User.edgeCases.contains { $0.tags.count == 1_000 })
 
-        // v0.2: nested types are recursed into.
+        // Nested types are recursed into.
         XCTAssertTrue(User.edgeCases.contains { $0.address.zipCode == Int.max })
         XCTAssertTrue(User.edgeCases.contains { $0.address.city.count == 10_000 })
 
-        // v0.2: enums cover every case and vary associated values.
+        // Enums cover every case and vary associated values.
         XCTAssertTrue(User.edgeCases.contains { $0.membership == .free })
         XCTAssertTrue(User.edgeCases.contains { $0.membership == .pro(renewsInDays: Int.min) })
 
-        // v0.3: Date and URL join in through the bundled conformances.
+        // Date and URL join in through the bundled conformances.
         XCTAssertTrue(User.edgeCases.contains { $0.joinedAt == .distantPast })
         XCTAssertTrue(User.edgeCases.contains { $0.joinedAt == .distantFuture })
         XCTAssertTrue(User.edgeCases.contains { $0.website == nil })
         XCTAssertTrue(User.edgeCases.contains { $0.website?.isFileURL == true })
     }
 
-    // v0.3: @EdgeCase(.custom([...])) bounds a property to its real domain.
+    // @EdgeCase(.custom([...])) bounds a property to its real domain.
     func testCustomOverrideKeepsAgeInItsDomain() {
         XCTAssertEqual(Set(User.edgeCases.map(\.age)), [0, 13, 118], "age never leaves the overridden domain")
         XCTAssertTrue(User.edgeCases.contains { $0.age == 13 }, "the age-gate boundary itself is generated")
     }
 
-    // v0.3: @EdgeCase(.exclude) pins a property to its default value.
+    // @EdgeCase(.exclude) pins a property to its default value.
     func testExcludedPropertyNeverVaries() {
         XCTAssertTrue(User.edgeCases.allSatisfy { $0.avatarSystemName == "person.crop.circle" })
     }
@@ -149,7 +149,7 @@ final class TestLocalFixtureTests: XCTestCase {
     }
 }
 
-// MARK: - v0.3 strategies
+// MARK: - Strategies
 
 /// Cross-field validation is where `.combinatorial` earns its keep: every
 /// pairing of adversarial username × code, not just one adversary at a time.

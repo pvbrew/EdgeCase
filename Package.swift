@@ -8,7 +8,6 @@ let package = Package(
     name: "EdgeCase",
     platforms: [.iOS(.v17), .macOS(.v10_15)],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "EdgeCase",
             targets: ["EdgeCase"]
@@ -27,11 +26,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.0-latest"),
+        // Documentation generation for the hosted docs; contributes no code.
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        // Macro implementation that performs the source transformation of a macro.
+        // Macro implementation that performs the source transformation.
         .macro(
             name: "EdgeCaseMacros",
             dependencies: [
@@ -40,7 +39,8 @@ let package = Package(
             ]
         ),
 
-        // Library that exposes a macro as part of its API, which is used in client programs.
+        // The library clients import: the macro declarations, the protocols,
+        // and the bundled Foundation conformances.
         .target(name: "EdgeCase", dependencies: ["EdgeCaseMacros"]),
 
         // XCTest integration: `XCTAssertNoThrow(forEachEdgeCase:)`. Add to
@@ -51,7 +51,7 @@ let package = Package(
         // Add to test targets only.
         .target(name: "EdgeCaseTesting", dependencies: ["EdgeCase"]),
 
-        // A test target used to develop the macro implementation.
+        // Exercises the macro expansion itself against expected source text.
         .testTarget(
             name: "EdgeCaseTests",
             dependencies: [
@@ -60,8 +60,8 @@ let package = Package(
             ]
         ),
 
-        // A test target that compiles and runs the generated code, verifying
-        // the expansions type-check and produce the expected values.
+        // Compiles and runs the generated code, verifying the expansions
+        // type-check and produce the expected values.
         .testTarget(
             name: "EdgeCaseRuntimeTests",
             dependencies: ["EdgeCase"]

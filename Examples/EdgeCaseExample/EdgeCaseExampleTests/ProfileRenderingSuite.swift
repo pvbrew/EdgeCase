@@ -4,8 +4,8 @@ import Foundation
 import Testing
 @testable import EdgeCaseExample
 
-// The v0.4 workflow: swift-testing's parameterized tests consume generated
-// edge cases directly — one test *case* per instance in the navigator, so a
+// The swift-testing workflow: parameterized tests consume generated edge
+// cases directly — one test *case* per instance in the navigator, so a
 // failure names the exact adversarial value instead of an index in a loop.
 
 @Suite("Profile rendering (swift-testing)")
@@ -38,9 +38,11 @@ struct ProfileRenderingSuite {
 struct FixtureCompositionSuite {
 
     // The fixtures integration point: every argument keeps the realistic
-    // fixture's values except one property carrying an edge case.
-    @Test(arguments: User.edgeCases(varying: .fixture()))
-    func renderingSurvivesOneAdversaryInARealisticProfile(_ user: User) throws {
+    // fixture's values except one property carrying an edge case —
+    // `labeledEdgeCases(varying:)` adds the short navigator labels on top.
+    @Test(arguments: User.labeledEdgeCases(varying: .fixture()))
+    func renderingSurvivesOneAdversaryInARealisticProfile(_ edgeCase: LabeledEdgeCase<User>) throws {
+        let user = edgeCase.value
         #expect(!user.displayName.isEmpty)
         #expect(!user.formattedKarma.isEmpty)
         _ = try user.exportCard()
